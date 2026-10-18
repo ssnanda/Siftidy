@@ -28,10 +28,18 @@ Runner files under `ios/` and `macos/` are intentionally generated instead of co
 
 ## Project boundaries
 
-- Local first: no user accounts, analytics, server, or outbound application telemetry. PhotoKit may communicate with iCloud as part of the system's Photos implementation.
+- Local first: no user accounts, analytics, or photo telemetry. An optional automatic update check (on by default, switchable off) fetches only public GitHub Release or AltStore JSON version metadata. PhotoKit may communicate with iCloud as part of the system's Photos implementation.
 - v0.1 only: no perceptual similarity, no people detection, no ranking large files, no Mac arbitrary-folder scan, no NAS/Ubuntu verified backup, no iMessage or WhatsApp direct database access.
 - Favorites searches apply to **currently loaded batches**; load more to include older items. Full-library indexing is planned for later.
 - v0.1 video preview is a thumbnail, not a video player.
 - Apple Photos may prompt for final confirmation after Siftidy's two review steps.
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/UPDATES.md](docs/UPDATES.md).
+
+## Update source
+
+- AltStore Classic JSON: https://raw.githubusercontent.com/ssnanda/Siftidy/main/altstore.json
+- macOS download releases: https://github.com/ssnanda/Siftidy/releases
+- Both platforms check on launch (configurable in the app) and provide a manual check; installation remains user-controlled.
+- The AltStore feed intentionally contains no installable app until a signed iPhone IPA is published. Publishing a Release with a signed device IPA automatically refreshes the feed.
+- Build artifacts are cleaned locally after CI runs. Older debug artifacts are pruned after a successful main Apple build, and surviving debug artifacts expire after 7 days.

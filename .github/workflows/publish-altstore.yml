@@ -1,0 +1,38 @@
+name: Publish AltStore source
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub Release tag containing a signed iPhone IPA
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-source:
+    name: Sync signed IPA metadata
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Validate IPA and refresh AltStore feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python3 scripts/sync_altstore.py "$GITHUB_REPOSITORY" "$RELEASE_TAG"
+      - name: Commit source only if changed
+        run: |
+          git add altstore.json
+          if git diff --cached --quiet; then
+            echo "No AltStore changes."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "chore(release): refresh AltStore source"
+          git push origin HEAD:main
