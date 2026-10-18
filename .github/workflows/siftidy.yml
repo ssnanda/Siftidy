@@ -37,7 +37,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: dart format lib test
       - run: flutter analyze
       - run: flutter test
       - name: Cleanup workdir
@@ -105,6 +105,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # The build can outlive newer commits to main; sync the latest tree first.
+          git fetch origin main
+          git reset --hard origin/main
           python3 scripts/sync_altstore.py "$GITHUB_REPOSITORY" "$RELEASE_TAG"
           git add altstore.json
           if ! git diff --cached --quiet; then
