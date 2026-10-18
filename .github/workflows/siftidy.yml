@@ -1,0 +1,134 @@
+name: 'Siftidy - Build, Release & Maintenance'
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: [altstore.json, 'docs/**', '**/*.md']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Action'
+        type: choice
+        required: true
+        default: release
+        options: [release, build, validate, cleanup]
+  schedule:
+    - cron: '37 4 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: siftidy-one-workflow-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Analyze and test
+    if: ${{ github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.task != 'cleanup') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test
+      - name: Cleanup workdir
+        if: always()
+        run: rm -rf .dart_tool build dist artifacts
+
+  build-and-publish:
+    name: Publish iPhone IPA and universal macOS
+    needs: validate
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'release' || inputs.task == 'build')) }}
+    runs-on: macos-latest
+    timeout-minutes: 85
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Choose next release version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BASE=$(sed -nE 's/^version: ([0-9]+)\.([0-9]+)\.[0-9]+.*/\1.\2/p' pubspec.yaml)
+          [[ "$BASE" =~ ^[0-9]+\.[0-9]+$ ]] || { echo 'Bad pubspec version'; exit 1; }
+          NEXT=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | \
+            awk -v base="$BASE" '$0 ~ "^v"base"[.][0-9]+$" {sub(/^v/, "", $0); split($0,a,"."); if (a[3]>max) max=a[3]} END {print max+1}')
+          echo "RELEASE_VERSION=$BASE.$NEXT" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=v$BASE.$NEXT" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - name: Generate Apple runners and Photos permissions
+        run: ./scripts/bootstrap_apple.sh
+      - name: Build unsigned iPhone device IPA for AltStore
+        run: flutter build ios --release --no-codesign --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
+      - name: Build universal macOS
+        run: flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
+      - name: Package and verify IPA, ZIP and DMG
+        run: ./scripts/package_release.sh
+      - name: Upload build-only artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'build' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: siftidy-apple-build-${{ github.run_number }}
+          path: dist/*
+          retention-days: 3
+          if-no-files-found: error
+      - name: Publish to GitHub Releases
+        if: ${{ github.event_name == 'push' || inputs.task == 'release' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" dist/* \
+            --target "$GITHUB_SHA" --title "Siftidy $RELEASE_VERSION" --latest \
+            --notes "Unsigned IPA for AltStore Classic re-signing; universal macOS ZIP and DMG for Intel and Apple Silicon (not notarized). Back up irreplaceable photos before testing."
+          gh release view "$RELEASE_TAG" --json url,assets --jq '{url,assets:[.assets[].name]}'
+      - name: Refresh AltStore JSON
+        if: ${{ github.event_name == 'push' || inputs.task == 'release' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sync_altstore.py "$GITHUB_REPOSITORY" "$RELEASE_TAG"
+          git add altstore.json
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore(release): update AltStore JSON [skip ci]"
+            git push origin HEAD:main
+          fi
+      - name: Cleanup generated build directories
+        if: always()
+        run: rm -rf build dist .dart_tool ios macos
+
+  cleanup-history:
+    name: Cleanup old Actions runs and artifacts
+    needs: [build-and-publish]
+    if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.task == 'cleanup') || ((github.event_name == 'push' || inputs.task == 'release') && needs.build-and-publish.result == 'success')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove old completed workflows and ephemeral artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/prune_workflows.py --days 7 --keep 3

@@ -44,3 +44,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE
 - Every push to `main` (excluding docs/AltStore-only edits) or manual Release workflow run builds an unsigned iPhone IPA suitable for AltStore Classic re-signing, plus both Intel/Apple Silicon macOS ZIP and DMG packages. Release numbers use `vMAJOR.MINOR.<workflow run number>`; the AltStore source is updated after the Release publishes.
 - iOS installation requires AltStore Classic (which re-signs the IPA); the published macOS builds are **unsigned and unnotarized**, so Gatekeeper may block them. Native signed/notarized releases require Apple Developer signing credentials.
 - CI removes generated iOS/macOS runners and temporary build directories after each release attempt. A scheduled cleanup and post-release cleanup delete completed workflow runs after 7 days while preserving the newest five per workflow. Published Releases, tags, and assets are **never deleted** by cleanup.
+
+## Single workflow
+
+Only `.github/workflows/siftidy.yml` is active. On main pushes it validates, builds an unsigned iOS device IPA and universal macOS ZIP/DMG, publishes GitHub Releases, and updates `altstore.json`. PRs validate only; manual `release`, `build`, `validate`, `cleanup` are available. Weekly scheduled cleanup and successful release cleanup remove completed runs of superseded Siftidy workflows and expired Actions artifacts. GitHub Releases and published app packages are never deleted.
