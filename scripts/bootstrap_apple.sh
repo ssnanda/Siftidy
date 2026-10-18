@@ -28,6 +28,7 @@ for plist in ios/Runner/Info.plist macos/Runner/Info.plist; do
 done
 for entitlements in macos/Runner/DebugProfile.entitlements macos/Runner/Release.entitlements; do
   plist_set_bool "$entitlements" com.apple.security.personal-information.photos-library
+  plist_set_bool "$entitlements" com.apple.security.network.client
 done
 
 echo 'Ready: flutter run -d macos or flutter run -d <iOS device id>'

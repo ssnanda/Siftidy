@@ -5,6 +5,7 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'filtering.dart';
 import 'library_repository.dart';
 import 'selection_review.dart';
+import '../updates/update_button.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -230,6 +231,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal)),
         ]),
         actions: [
+          const UpdateButton(),
           IconButton(
             tooltip: 'Refresh library',
             icon: const Icon(Icons.refresh),

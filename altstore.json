@@ -1,0 +1,11 @@
+{
+  "name": "Siftidy",
+  "identifier": "com.siftidy.altstore",
+  "subtitle": "Private photo cleanup for iPhone",
+  "description": "Siftidy helps review and safely organize your Apple Photos library on device. Signed iOS builds will appear here when published.",
+  "website": "https://github.com/ssnanda/Siftidy",
+  "sourceURL": "https://raw.githubusercontent.com/ssnanda/Siftidy/main/altstore.json",
+  "tintColor": "#087E83",
+  "apps": [],
+  "news": []
+}
