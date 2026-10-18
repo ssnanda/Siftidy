@@ -98,8 +98,9 @@ class _UpdateButtonState extends State<UpdateButton> {
                   Text(status?.message ??
                       'No update check has been completed yet.'),
                   const SizedBox(height: 8),
-                  Text('Installed: $installed' +
-                      (latest == null ? '' : ' · Latest: $latest')),
+                  Text(latest == null
+                      ? 'Installed: $installed'
+                      : 'Installed: $installed · Latest: $latest'),
                   const SizedBox(height: 14),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
@@ -130,8 +131,7 @@ class _UpdateButtonState extends State<UpdateButton> {
                 onPressed: () {
                   Navigator.pop(dialogContext);
                   if (Platform.isIOS) {
-                    final link = Uri.parse('altstore://source?url=' +
-                        Uri.encodeComponent(altStoreSourceUrl));
+                    final link = Uri.parse('altstore://source?url=${Uri.encodeComponent(altStoreSourceUrl)}');
                     _openExternal(link);
                   } else if (status?.downloadUrl != null) {
                     _openExternal(status!.downloadUrl!);

@@ -203,7 +203,7 @@ class UpdateService {
           );
       if (response.statusCode == HttpStatus.notFound) return null;
       if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('HTTP ' + response.statusCode.toString(), uri: uri);
+        throw HttpException('HTTP ${response.statusCode}', uri: uri);
       }
       final body = await utf8.decoder.bind(response).join().timeout(
             const Duration(seconds: 10),
