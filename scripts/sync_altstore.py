@@ -107,7 +107,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="siftidy-ipa-") as workdir:
         ipa_path = Path(workdir) / "Siftidy.ipa"
         with urllib.request.urlopen(
-            request(asset["browser_download_url"]), timeout=60
+            urllib.request.Request(asset["browser_download_url"], headers={"User-Agent": AGENT}), timeout=60
         ) as response, ipa_path.open("wb") as output:
             shutil.copyfileobj(response, output)
         info, permissions = examine_ipa(ipa_path, workdir)
