@@ -9,6 +9,12 @@ command -v /usr/libexec/PlistBuddy >/dev/null || {
 flutter create --project-name siftidy --org com.siftidy --platforms=ios,macos .
 flutter pub get
 
+# Flutter may generate a sample test for 'MyApp', which this app does not use.
+# Never remove a real application test.
+if [[ -f test/widget_test.dart ]] && grep -q 'await tester.pumpWidget(const MyApp())' test/widget_test.dart; then
+  rm test/widget_test.dart
+fi
+
 plist_set_string() {
   local plist="$1" key="$2" value="$3"
   /usr/libexec/PlistBuddy -c "Set :$key $value" "$plist" 2>/dev/null ||
