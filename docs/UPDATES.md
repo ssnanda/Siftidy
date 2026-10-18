@@ -50,3 +50,9 @@ this rather than offering a broken download.
 - The checked-in source and the AltStore JSON feed are **never deleted**.
 
 Check https://github.com/ssnanda/Siftidy/actions for job outcomes.
+
+## Automated GitHub Releases
+
+Pushes to `main` and manual runs of **Build and publish Siftidy** build an unsigned iPhone IPA (for AltStore Classic re-signing) and a universal `arm64` + `x86_64` macOS app, published as both ZIP and DMG. The macOS builds are not notarized. Version names use the pubspec major/minor and the Release workflow run number. The pipeline updates `altstore.json` after the Release is published; its commit skips CI to prevent a loop.
+
+The **Prune old Actions runs** workflow runs daily or manually and also runs after successful releases. It preserves the latest five executions of each workflow and deletes completed runs older than seven days. Released binaries, release tags and release history are retained. Cleanup of local build directories runs even when a release build fails.

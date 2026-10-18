@@ -2,7 +2,7 @@
 
 **Private, review-first media cleanup for iPhone and Mac.**
 
-Siftidy is a hobby project that helps organize and review your Apple Photos library without uploading photos to a server. The initial release is **v0.1.0 (source foundation)**, not a signed App Store/IPA/DMG release.
+Siftidy is a hobby project that helps organize and review your Apple Photos library without uploading photos to a server. The app is at **v0.1 (early development)**. Pushes to `main` create versioned unsigned IPA and universal macOS GitHub Releases; releases are not Apple notarized.
 
 ## v0.1 — what is implemented
 
@@ -13,7 +13,7 @@ Siftidy is a hobby project that helps organize and review your Apple Photos libr
 - Long-press/tap selection and select-currently-loaded-media.
 - Explicit selected-items review, optional file-size measurement with progress, and **two-step manual deletion** using the platform's Photos confirmation.
 - Handling of full/limited/denied permission states and system Settings.
-- GitHub Actions analysis, unit tests, unsigned iOS simulator/macOS build jobs, and downloadable debug build artifacts.
+- GitHub Actions analysis and tests, automatic unsigned iPhone IPA + universal macOS ZIP/DMG release assets, and an AltStore feed.
 
 **Deletion warning:** When you delete items in Apple Photos, deletions can sync to other devices using iCloud Photos. Items normally move to Recently Deleted. Siftidy does not offer an instant undo, verified backup, or automatic duplicate cleanup in v0.1. Back up important media before testing deletion. The displayed size is an approximation and is **not** a guaranteed amount of immediately reclaimed device storage.
 
@@ -41,5 +41,6 @@ See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE
 - AltStore Classic JSON: https://raw.githubusercontent.com/ssnanda/Siftidy/main/altstore.json
 - macOS download releases: https://github.com/ssnanda/Siftidy/releases
 - Both platforms check on launch (configurable in the app) and provide a manual check; installation remains user-controlled.
-- The AltStore feed intentionally contains no installable app until a signed iPhone IPA is published. Publishing a Release with a signed device IPA automatically refreshes the feed.
-- Build artifacts are cleaned locally after CI runs. Older debug artifacts are pruned after a successful main Apple build, and surviving debug artifacts expire after 7 days.
+- Every push to `main` (excluding docs/AltStore-only edits) or manual Release workflow run builds an unsigned iPhone IPA suitable for AltStore Classic re-signing, plus both Intel/Apple Silicon macOS ZIP and DMG packages. Release numbers use `vMAJOR.MINOR.<workflow run number>`; the AltStore source is updated after the Release publishes.
+- iOS installation requires AltStore Classic (which re-signs the IPA); the published macOS builds are **unsigned and unnotarized**, so Gatekeeper may block them. Native signed/notarized releases require Apple Developer signing credentials.
+- CI removes generated iOS/macOS runners and temporary build directories after each release attempt. A scheduled cleanup and post-release cleanup delete completed workflow runs after 7 days while preserving the newest five per workflow. Published Releases, tags, and assets are **never deleted** by cleanup.

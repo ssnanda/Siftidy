@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Publish an actual GitHub Release IPA to the AltStore Classic source.
+"""Publish an actual iOS device IPA in the AltStore Classic source.
 
-Runs on a macOS release runner so codesign can inspect the IPA entitlements.
-Never inserts a speculative download URL or simulator-only build.
+AltStore signs unsigned IPA packages during installation. We check the IPA
+bundle/version and archive metadata, and never publish simulator builds.
 """
 import json
 import os
 import plistlib
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -43,39 +42,27 @@ def read_release(repository, tag):
 
 
 def examine_ipa(path, workdir):
+    # AltStore Classic re-signs the unsigned device app during installation.
+    # A Developer ID signature is therefore not required on the original IPA.
     with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
         plist_names = [
-            name for name in archive.namelist()
+            name for name in names
             if name.startswith("Payload/")
             and name.endswith(".app/Info.plist")
             and name.count("/") == 2
         ]
         if len(plist_names) != 1:
-            raise ValueError("Expected one iPhone app Info.plist in Payload.")
-        plist_name = plist_names[0]
-        info = plistlib.loads(archive.read(plist_name))
-        # Only one signed application from an authenticated GitHub Release.
-        archive.extractall(workdir)
-    app_dir = Path(workdir) / Path(plist_name).parent
-    result = subprocess.run(
-        ["codesign", "-d", "--entitlements", "-", str(app_dir)],
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise ValueError(
-            "iOS IPA code signature could not be inspected; "
-            "upload a signed device IPA."
-        )
-    try:
-        entitlements = plistlib.loads(result.stdout)
-    except (ValueError, TypeError, plistlib.InvalidFileException) as exc:
-        raise ValueError("Could not read code signing entitlements.") from exc
-    if not isinstance(entitlements, dict):
-        raise ValueError("Expected a signing entitlements dictionary.")
-    excluded = {"application-identifier", "com.apple.developer.team-identifier"}
+            raise ValueError("Expected exactly one iPhone app in Payload.")
+        if any(
+            name.startswith("/") or ".." in Path(name).parts
+            for name in names
+        ):
+            raise ValueError("Unsafe path inside IPA archive.")
+        info = plistlib.loads(archive.read(plist_names[0]))
+    # Privacy declarations remain useful; AltStore handles signing entitlements.
     permissions = {
-        "entitlements": sorted(key for key in entitlements if key not in excluded),
+        "entitlements": [],
         "privacy": {
             key: value for key, value in info.items()
             if key.endswith("UsageDescription") and isinstance(value, str)
@@ -159,7 +146,7 @@ def main():
         reverse=True,
     )
     SOURCE.write_text(json.dumps(source, indent=2) + "\n", encoding="utf-8")
-    print("Updated AltStore source for signed Siftidy IPA " + app_version)
+    print("Updated AltStore source for Siftidy IPA " + app_version)
 
 
 if __name__ == "__main__":

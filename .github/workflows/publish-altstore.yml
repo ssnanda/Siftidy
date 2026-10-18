@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing GitHub Release tag containing a signed iPhone IPA
+        description: Existing GitHub Release tag containing a device IPA
         required: true
         type: string
 
@@ -14,14 +14,14 @@ permissions:
 
 jobs:
   publish-source:
-    name: Sync signed IPA metadata
+    name: Resync published IPA metadata
     runs-on: macos-latest
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Validate IPA and refresh AltStore feed
+      - name: Validate IPA metadata and refresh AltStore feed
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
