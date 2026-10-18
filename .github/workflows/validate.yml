@@ -1,0 +1,48 @@
+name: Validate Siftidy
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dart-and-tests:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format lib test
+      - run: flutter analyze
+      - run: flutter test
+
+  apple-build:
+    name: Unsigned Apple compilation
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Apple runners and Photos entitlements
+        run: ./scripts/bootstrap_apple.sh
+      - name: Check iOS simulator compilation
+        run: flutter build ios --simulator --debug --no-codesign
+      - name: Check macOS compilation
+        run: flutter build macos --debug
+      - name: Package Apple simulator and macOS builds
+        run: |
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app artifacts/siftidy-ios-simulator-debug.zip
+          find build/macos/Build/Products/Debug -maxdepth 1 -name '*.app' -print -quit | while read -r app; do
+            ditto -c -k --sequesterRsrc --keepParent "$app" artifacts/siftidy-macos-debug.zip
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: siftidy-v0.1-apple-debug-builds
+          path: artifacts/*.zip
+          if-no-files-found: error
