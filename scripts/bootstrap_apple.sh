@@ -31,6 +31,17 @@ plist_set_string macos/Runner/Info.plist NSPhotoLibraryUsageDescription \
 plist_set_string macos/Runner/Info.plist NSPhotoLibraryAddUsageDescription \
   'Siftidy only changes your Photos library when you confirm an action.'
 plist_set_string macos/Runner/Info.plist CFBundleDisplayName 'Siftidy'
+
+# Work around garbled glyphs, stale text frames and redraw corruption observed
+# on macOS builds using Flutter 3.47's default Impeller renderer. Flutter
+# officially supports FLTEnableImpeller=false in macOS Info.plist.
+# Re-enable only after comparing screenshots on affected user hardware.
+# Release as well as local debug builds need this setting.
+if /usr/libexec/PlistBuddy -c 'Print :FLTEnableImpeller' macos/Runner/Info.plist >/dev/null 2>&1; then
+  /usr/libexec/PlistBuddy -c 'Set :FLTEnableImpeller false' macos/Runner/Info.plist
+else
+  /usr/libexec/PlistBuddy -c 'Add :FLTEnableImpeller bool false' macos/Runner/Info.plist
+fi
 for entitlements in macos/Runner/DebugProfile.entitlements macos/Runner/Release.entitlements; do
   plist_set_bool "$entitlements" com.apple.security.personal-information.photos-library
   plist_set_bool "$entitlements" com.apple.security.network.client

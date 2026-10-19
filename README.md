@@ -33,3 +33,7 @@ The only workflow file is `.github/workflows/siftidy.yml`:
 validation → universal macOS build → GitHub Releases (ZIP only) → Actions cleanup. A successful Mac release also removes retired IPA and DMG assets from historical Releases, without deleting Mac packages or release tags. The obsolete AltStore feed and iOS build pipeline have been deleted.
 
 The current release is intended for personal testing, not a notarized production installation.
+
+### Mac rendering compatibility
+
+Siftidy currently disables Flutter's default macOS Impeller renderer to investigate corrupted text/dialogs and stale frames. The build pipeline verifies the flag in the actual app ZIP. This is a compatibility workaround, and should be checked on the affected Mac before treating the issue as resolved. Newer releases also fix frozen update progress dialogs with visible errors and a ZIP fallback.

@@ -15,6 +15,16 @@ ARCHS=$(lipo -archs "$MAC_BINARY")
 MAC_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$MAC_APP/Contents/Info.plist")
 [[ "$MAC_VERSION" == "$RELEASE_VERSION" ]] || { echo "Incorrect macOS version $MAC_VERSION"; exit 1; }
 
+# Enforce the renderer workaround on the real built artifact, not just
+# the generated runner template. Prevent a future flutter create from
+# silently publishing a release with broken text rendering again.
+RENDERER=$(/usr/libexec/PlistBuddy -c 'Print :FLTEnableImpeller' "$MAC_APP/Contents/Info.plist")
+[[ "$RENDERER" == "false" ]] || {
+  echo "Impeller must be disabled on macOS until redraw issue is resolved (got $RENDERER)"
+  exit 1
+}
+echo 'Verified: FLTEnableImpeller=false in bundled macOS Info.plist'
+
 mkdir -p dist
 ditto -c -k --sequesterRsrc --keepParent "$MAC_APP" "dist/Siftidy-macOS-universal-v$RELEASE_VERSION.zip"
 unzip -tq "dist/Siftidy-macOS-universal-v$RELEASE_VERSION.zip"
