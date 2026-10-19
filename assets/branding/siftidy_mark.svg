@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Siftidy layered photo icon">
+  <defs>
+    <linearGradient id="front" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1cc8d3"/><stop offset="1" stop-color="#087880"/>
+    </linearGradient>
+    <linearGradient id="mountains" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#b7f5ff"/><stop offset="1" stop-color="#3fa5e0"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="#ffffff" stroke="#e1eaed" stroke-width="3"/>
+  <g transform="rotate(9 134 128)">
+    <rect x="49" y="51" width="164" height="166" rx="21" fill="#00666f"/>
+    <rect x="62" y="64" width="138" height="140" rx="14" fill="#13aab9"/>
+  </g>
+  <g transform="rotate(-8 121 123)">
+    <rect x="42" y="40" width="167" height="168" rx="22" fill="#ffffff"/>
+    <rect x="48" y="46" width="155" height="156" rx="17" fill="url(#front)"/>
+    <circle cx="164" cy="83" r="18" fill="#ffc83b"/>
+    <path d="M55 175 98 117 125 145 145 126 196 182 196 194 55 194Z" fill="url(#mountains)"/>
+    <path d="m79 194 64-71 53 60v11Z" fill="#72c5ec" opacity=".94"/>
+    <rect x="48" y="46" width="155" height="156" rx="17" fill="none" stroke="#e8ffff" stroke-width="3"/>
+  </g>
+</svg>
