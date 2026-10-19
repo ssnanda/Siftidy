@@ -370,18 +370,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ValueNotifier<bool> _focusedSignal(String id) =>
       _focusedSignals.putIfAbsent(id, () => ValueNotifier<bool>(false));
 
-  void _setSelected(AssetEntity asset, bool value) {
-    if (_deleting || _selected.contains(asset.id) == value) return;
-    setState(() {
-      if (value) {
-        _selected.add(asset.id);
-      } else {
-        _selected.remove(asset.id);
-      }
-      _selectedSignal(asset.id).value = value;
-    });
-  }
-
   void _toggleAsset(AssetEntity asset) {
     if (_deleting) return;
     setState(() {
