@@ -17,6 +17,8 @@ class UpdateStatus {
     required this.installedVersion,
     this.latestVersion,
     this.downloadUrl,
+    this.sha256,
+    this.downloadSize,
   });
 
   final UpdateState state;
@@ -24,6 +26,8 @@ class UpdateStatus {
   final String installedVersion;
   final String? latestVersion;
   final Uri? downloadUrl;
+  final String? sha256;
+  final int? downloadSize;
   bool get hasUpdate => state == UpdateState.available;
 }
 
@@ -64,21 +68,29 @@ UpdateStatus evaluateGitHubRelease(
     throw const FormatException('GitHub Release has an invalid version tag.');
   }
   Uri? package;
+  String? digest;
+  int? size;
   final assets = release['assets'];
   if (assets is List) {
     for (final asset in assets) {
       if (asset is! Map) continue;
       final name = (asset['name']?.toString() ?? '').toLowerCase();
-      final isMacPackage =
-          (name.contains('macos') || name.contains('darwin') ||
-              name.contains('mac-')) &&
-          (name.endsWith('.dmg') || name.endsWith('.zip') ||
-              name.endsWith('.pkg'));
-      if (!isMacPackage) continue;
+      if (!name.startsWith('siftidy-macos-') || !name.endsWith('.zip')) {
+        continue;
+      }
       final url =
           Uri.tryParse(asset['browser_download_url']?.toString() ?? '');
-      if (url != null && url.scheme == 'https' && url.host == 'github.com') {
+      if (url != null &&
+          url.scheme == 'https' &&
+          url.host == 'github.com' &&
+          url.path.startsWith('/ssnanda/Siftidy/releases/download/')) {
         package = url;
+        final rawDigest = asset['digest']?.toString() ?? '';
+        if (RegExp(r'^sha256:[0-9a-fA-F]{64}$').hasMatch(rawDigest)) {
+          digest = rawDigest.substring(7).toLowerCase();
+        }
+        final rawSize = asset['size'];
+        if (rawSize is int && rawSize > 0) size = rawSize;
         break;
       }
     }
@@ -91,6 +103,8 @@ UpdateStatus evaluateGitHubRelease(
       installedVersion: installedVersion,
       latestVersion: version,
       downloadUrl: package,
+      sha256: digest,
+      downloadSize: size,
     );
   }
   if (match == -1) {

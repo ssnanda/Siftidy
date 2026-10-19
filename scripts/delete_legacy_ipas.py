@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove iOS/IPA downloads from previous Siftidy GitHub Releases.
+"""Remove retired iOS IPA and macOS DMG assets from Siftidy GitHub Releases.
 
 Retain historical releases, tags and all macOS ZIP/DMG packages.
 """
@@ -25,13 +25,13 @@ def main():
             break
         for release in releases:
             for asset in release.get("assets", []):
-                if asset["name"].lower().endswith(".ipa"):
+                if asset["name"].lower().endswith((".ipa", ".dmg")):
                     api(f"repos/{repository}/releases/assets/{asset['id']}", "DELETE")
-                    print(f"Deleted retired iPhone IPA: {asset['name']}")
+                    print(f"Deleted retired release asset: {asset['name']}")
                     removed += 1
         if len(releases) < 100:
             break
-    print(f"Removed {removed} retired IPA release assets. macOS packages retained.")
+    print(f"Removed {removed} retired IPA/DMG assets. macOS ZIP packages retained.")
 
 
 if __name__ == "__main__":

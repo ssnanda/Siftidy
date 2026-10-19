@@ -35,5 +35,10 @@ for entitlements in macos/Runner/DebugProfile.entitlements macos/Runner/Release.
   plist_set_bool "$entitlements" com.apple.security.personal-information.photos-library
   plist_set_bool "$entitlements" com.apple.security.network.client
 done
+# The self-updater must replace a user-installed .app inside /Applications.
+# The Release app is not sandboxed; keep the sandbox for local debug builds.
+# This is explicitly not a Mac App Store distribution.
+ /usr/libexec/PlistBuddy -c 'Set :com.apple.security.app-sandbox false' \
+   macos/Runner/Release.entitlements 2>/dev/null || true
 
 echo 'Ready: flutter run -d macos'

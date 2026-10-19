@@ -17,9 +17,6 @@ MAC_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$M
 
 mkdir -p dist
 ditto -c -k --sequesterRsrc --keepParent "$MAC_APP" "dist/Siftidy-macOS-universal-v$RELEASE_VERSION.zip"
-hdiutil create -volname "Siftidy" -srcfolder "$MAC_APP" -ov -format UDZO \
-  "dist/Siftidy-macOS-universal-v$RELEASE_VERSION.dmg"
-
 unzip -tq "dist/Siftidy-macOS-universal-v$RELEASE_VERSION.zip"
 echo "Built Siftidy $RELEASE_VERSION (macOS: $ARCHS)"
 ls -lh dist

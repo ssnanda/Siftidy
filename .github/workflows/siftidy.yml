@@ -75,7 +75,7 @@ jobs:
         run: ./scripts/bootstrap_apple.sh
       - name: Build universal macOS
         run: flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
-      - name: Package and verify macOS ZIP and DMG
+      - name: Package and verify macOS ZIP
         run: ./scripts/package_release.sh
       - name: Upload build-only artifacts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'build' }}
@@ -94,7 +94,7 @@ jobs:
           set -euo pipefail
           gh release create "$RELEASE_TAG" dist/* \
             --target "$GITHUB_SHA" --title "Siftidy $RELEASE_VERSION" --latest \
-            --notes "Universal macOS ZIP and DMG for Intel and Apple Silicon. Not Apple Developer ID signed or notarized. Back up irreplaceable photos before testing."
+            --notes "Universal macOS ZIP for Intel and Apple Silicon with an in-app ZIP updater. Not Apple Developer ID signed or notarized. Back up irreplaceable photos before testing."
           gh release view "$RELEASE_TAG" --json url,assets --jq '{url,assets:[.assets[].name]}'
       - name: Cleanup generated build directories
         if: always()
@@ -111,7 +111,7 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v4
-      - name: Remove retired iPhone IPA assets
+      - name: Remove obsolete IPA and DMG release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/delete_legacy_ipas.py
