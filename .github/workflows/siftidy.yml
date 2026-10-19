@@ -73,6 +73,17 @@ jobs:
           echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Generate Apple runners and Photos permissions
         run: ./scripts/bootstrap_apple.sh
+      - name: Check updater tool paths on macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /bin/sh /usr/bin/ditto /usr/bin/open /usr/libexec/PlistBuddy; do
+            if [[ ! -x "$path" ]]; then
+              echo "Missing required macOS updater executable: $path"
+              exit 1
+            fi
+          done
+          echo 'macOS updater dependencies are available'
       - name: Build universal macOS
         run: flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
       - name: Package and verify macOS ZIP
