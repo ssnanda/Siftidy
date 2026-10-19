@@ -733,6 +733,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     return CustomScrollView(
       controller: _scroll,
+      cacheExtent: 900,
       slivers: [
 
         SliverPadding(
@@ -746,63 +747,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
             itemBuilder: (context, index) {
               final asset = visible[index];
-              final selected = _selected.contains(asset.id);
-              return Semantics(
-                label: '${asset.type == AssetType.video ? "Video" : "Photo"} '
-                    '${selected ? "selected" : "not selected"}',
-                child: InkWell(
-                  onTap: () {
-                    _gridFocus.requestFocus();
-                    setState(() => _focusedIndex = index);
-                    _toggleAsset(asset);
-                  },
-                  onDoubleTap: () {
-                    _gridFocus.requestFocus();
-                    setState(() => _focusedIndex = index);
-                    _showPreview(asset);
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Stack(fit: StackFit.expand, children: [
-                      AssetEntityImage(
-                        asset,
-                        isOriginal: false,
-                        thumbnailSize: const ThumbnailSize(350, 350),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const ColoredBox(
-                          color: Color(0xFFDEE5E5),
-                          child: Icon(Icons.broken_image_outlined),
-                        ),
-                      ),
-                      if (selected) Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0x16008790),
-                          border: Border.all(color: const Color(0xFF007982), width: 3),
-                        ),
-                      ),
-                      if (_focusedIndex == index)
-                        IgnorePointer(child: Container(
-                          decoration: BoxDecoration(border: Border.all(
-                            color: const Color(0xFFEDB53A), width: 2,
-                          )),
-                        )),
-                      Positioned(
-                        top: 5, right: 5,
-                        child: Icon(
-                          selected ? Icons.check_circle : Icons.circle_outlined,
-                          color: selected ? const Color(0xFFB9F4F1) : Colors.white,
-                          shadows: const [Shadow(color: Colors.black54, blurRadius: 5)],
-                        ),
-                      ),
-                      if (asset.type == AssetType.video)
-                        const Positioned(bottom: 5, right: 5,
-                          child: Icon(Icons.videocam, color: Colors.white, size: 19)),
-                      if (asset.isFavorite)
-                        const Positioned(bottom: 5, left: 5,
-                          child: Icon(Icons.favorite, color: Colors.white, size: 17)),
-                    ]),
-                  ),
-                ),
+              return PhotoGalleryTile(
+                key: ValueKey(asset.id),
+                asset: asset,
+                selected: _selectedSignal(asset.id),
+                focused: _focusedSignal(asset.id),
+                keeper: _keeperIds.contains(asset.id),
+                onClick: () {
+                  _gridFocus.requestFocus();
+                  _focusAndSelectWithoutScroll(index, visible);
+                  _setSelected(asset, true);
+                },
+                onPreview: () {
+                  _gridFocus.requestFocus();
+                  _showPreview(asset);
+                },
               );
             },
           ),
