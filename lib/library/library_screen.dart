@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'photo_gallery_tile.dart';
 import 'photo_preview_dialog.dart';
+import 'photo_preview_geometry.dart';
 
 import 'filtering.dart';
 import 'library_repository.dart';
@@ -187,8 +188,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final batch = await _repository.page(album, _nextPage, _pageSize);
       if (!mounted || generation != _generation) return;
       setState(() {
-        _assets.addAll(batch);
-        _visibleCache.addAll(batch.where(_isVisibleAsset));
+        // A deletion can move PhotoKit's page boundary. When a page is
+        // re-read, append only new asset IDs to avoid duplicates and skips.
+        final existingIds = _assets.map((item) => item.id).toSet();
+        final unique = batch.where((item) => !existingIds.contains(item.id));
+        _assets.addAll(unique);
+        _visibleCache.addAll(unique.where(_isVisibleAsset));
         _nextPage++;
         _hasMore = batch.length == _pageSize && _assets.length < _libraryCount;
         _loadingMore = false;
@@ -429,7 +434,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
           }
         },
         toggle: _toggleAsset,
-        delete: _deleteSelected,
+        delete: (asset) async {
+          final deleted = await _deleteAssets([asset], selectNext: false);
+          return deleted.contains(asset.id);
+        },
         keep: _keepSelected,
       ),
     ).whenComplete(() {
@@ -513,38 +521,107 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _deleteSelected() async {
-    final chosen = _assets.where((asset) => _selected.contains(asset.id)).toList();
-    if (chosen.isEmpty || _deleting) return;
+    final chosen = _assets
+        .where((asset) => _selected.contains(asset.id))
+        .toList(growable: false);
+    await _deleteAssets(chosen);
+  }
+
+  /// Delete only the requested assets. Leave the loaded grid intact, so the
+  /// user can immediately continue at the next photo without a full refresh.
+  /// Preview passes selectNext:false and controls its own next-photo focus.
+  Future<Set<String>> _deleteAssets(
+    List<AssetEntity> chosen, {
+    bool selectNext = true,
+  }) async {
+    if (chosen.isEmpty || _deleting) return <String>{};
     if (chosen.any((item) => _keeperIds.contains(item.id))) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Keepers are protected from deletion in Siftidy.'),
       ));
-      return;
+      return <String>{};
     }
+    final before = List<AssetEntity>.of(_visibleCache);
+    final beforeIds = before.map((item) => item.id).toList(growable: false);
+    final oldFocusedId = _focusedIndex >= 0 && _focusedIndex < before.length
+        ? before[_focusedIndex].id
+        : null;
+    final originalIndex = _focusedIndex;
+
     setState(() => _deleting = true);
     try {
-      final deleted = await _repository.delete(chosen.map((e) => e.id).toList());
-      if (!mounted) return;
-      final deletedSet = deleted.toSet();
-      setState(() {
-        _assets.removeWhere((item) => deletedSet.contains(item.id));
-        _visibleCache.removeWhere((item) => deletedSet.contains(item.id));
-        _selected.removeAll(deletedSet);
-        _libraryCount = (_libraryCount - deletedSet.length).clamp(0, 1 << 30).toInt();
-        _deleting = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(deletedSet.isEmpty
-            ? 'No media was deleted.'
-            : 'Deleted ${deletedSet.length} item(s). Check Photos → Recently Deleted.'),
-      ));
-      if (deletedSet.isNotEmpty) await _reload();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _deleting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $error')),
+      // Apple Photos may ask for its own confirmation. Siftidy adds none.
+      final response = await _repository.delete(
+        chosen.map((item) => item.id).toList(growable: false),
       );
+      if (!mounted) return <String>{};
+      final requestedIds = chosen.map((item) => item.id).toSet();
+      final deletedIds = response.where(requestedIds.contains).toSet();
+      if (deletedIds.isNotEmpty) {
+        setState(() {
+          _assets.removeWhere((item) => deletedIds.contains(item.id));
+          _visibleCache.removeWhere((item) => deletedIds.contains(item.id));
+          _selected.removeAll(deletedIds);
+          for (final id in deletedIds) {
+            _selectedSignals[id]?.value = false;
+            _focusedSignals[id]?.value = false;
+          }
+          if (oldFocusedId != null) {
+            _focusedSignals[oldFocusedId]?.value = false;
+          }
+          _focusedIndex = -1;
+          _libraryCount = (_libraryCount - deletedIds.length)
+              .clamp(0, 1 << 30).toInt();
+          // Re-read the page whose offset shifted when PhotoKit removed items.
+          if (_nextPage > _assets.length ~/ _pageSize) {
+            _nextPage = _assets.length ~/ _pageSize;
+          }
+          _hasMore = _assets.length < _libraryCount;
+        });
+
+        if (selectNext && mounted) {
+          var nextIndex =
+              nextIndexAfterDeletion(beforeIds, deletedIds, originalIndex);
+          final origin = originalIndex >= 0 &&
+                  originalIndex < beforeIds.length &&
+                  deletedIds.contains(beforeIds[originalIndex])
+              ? originalIndex
+              : beforeIds.indexWhere(deletedIds.contains);
+          final hasLater = origin >= 0 &&
+              beforeIds.skip(origin + 1).any((id) => !deletedIds.contains(id));
+          if (!hasLater && _hasMore) {
+            final previousCount = _visibleCache.length;
+            await _fetchNext(_generation);
+            if (!mounted) return deletedIds;
+            if (_visibleCache.length > previousCount) {
+              nextIndex = previousCount; // Prefer newly loaded next photo.
+            }
+          }
+          if (nextIndex >= 0 && nextIndex < _visibleCache.length) {
+            _focusAndSelect(
+              nextIndex,
+              _visibleCache,
+              galleryColumnCount(MediaQuery.sizeOf(context).width),
+            );
+          }
+        }
+      }
+      if (!mounted) return deletedIds;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(deletedIds.isEmpty
+            ? 'No media was deleted.'
+            : 'Deleted ${deletedIds.length} item(s). Check Photos → Recently Deleted.'),
+      ));
+      return deletedIds;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $error')),
+        );
+      }
+      return <String>{};
     }
   }
 
