@@ -46,3 +46,9 @@ String formatByteCount(int count) {
   }
   return '${(count / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
 }
+
+/// Approximately 25% larger thumbnails than the original 160px grid.
+int galleryColumnCount(double windowWidth) {
+  final available = windowWidth - (windowWidth >= 850 ? 244 : 0) - 24;
+  return (available / 205).floor().clamp(2, 8);
+}

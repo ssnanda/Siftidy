@@ -65,7 +65,21 @@ class LibraryRepository {
     for (final path in userAlbums(paths)) {
       if (path.name == keeperAlbumName) return path;
     }
+    // Fall back to an exact name lookup if PhotoKit did not label its type.
+    for (final path in paths) {
+      if (!path.isAll && path.name == keeperAlbumName) return path;
+    }
     return null;
+  }
+
+  Future<Set<String>> keeperAssetIds(AssetPathEntity album) async {
+    final ids = <String>{};
+    for (var pageIndex = 0; ; pageIndex++) {
+      final batch = await album.getAssetListPaged(page: pageIndex, size: 200);
+      ids.addAll(batch.map((asset) => asset.id));
+      if (batch.length < 200) break;
+    }
+    return ids;
   }
 
   /// Add existing Photos assets to a persistent Apple Photos album.
@@ -75,6 +89,9 @@ class LibraryRepository {
     final paths = await collections(oldestFirst: false);
     final keeper = keepersAlbum(paths) ??
         await PhotoManager.editor.darwin.createAlbum(keeperAlbumName);
+    if (keeper == null) {
+      throw StateError('Unable to create Siftidy Keepers album in Photos.');
+    }
     var added = 0;
     for (final asset in assets) {
       final result = await PhotoManager.editor.copyAssetToPath(

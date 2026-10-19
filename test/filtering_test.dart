@@ -14,6 +14,12 @@ void main() {
     expect(isVisible(filter: MediaFilter.favorites, type: AssetType.video, favorite: true), isTrue);
   });
 
+  test('larger thumbnails fit the available window width', () {
+    expect(galleryColumnCount(1536), 6);
+    expect(galleryColumnCount(950), 3);
+    expect(galleryColumnCount(600), 2);
+  });
+
   test('human-readable sizes handle zero and GB', () {
     expect(formatByteCount(0), '0 B');
     expect(formatByteCount(1024), '1.0 KB');
