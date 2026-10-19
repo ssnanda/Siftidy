@@ -330,54 +330,96 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  void _toggleAsset(AssetEntity asset) {
-    if (_deleting) return;
+  ValueNotifier<bool> _selectedSignal(String id) =>
+      _selectedSignals.putIfAbsent(
+        id, () => ValueNotifier<bool>(_selected.contains(id)));
+
+  ValueNotifier<bool> _focusedSignal(String id) =>
+      _focusedSignals.putIfAbsent(id, () => ValueNotifier<bool>(false));
+
+  void _setSelected(AssetEntity asset, bool value) {
+    if (_deleting || _selected.contains(asset.id) == value) return;
     setState(() {
-      if (!_selected.add(asset.id)) _selected.remove(asset.id);
+      if (value) {
+        _selected.add(asset.id);
+      } else {
+        _selected.remove(asset.id);
+      }
+      _selectedSignal(asset.id).value = value;
+    });
+  }
+
+  void _toggleAsset(AssetEntity asset) {
+    _setSelected(asset, !_selected.contains(asset.id));
+  }
+
+  void _focusAndSelectWithoutScroll(
+      int index, List<AssetEntity> items) {
+    if (index < 0 || index >= items.length) return;
+    final old = _focusedIndex;
+    setState(() {
+      _focusedIndex = index;
+      _selected.add(items[index].id);
+      _selectedSignal(items[index].id).value = true;
+    });
+    if (old >= 0 && old != index && old < items.length) {
+      _focusedSignal(items[old].id).value = false;
+    }
+    _focusedSignal(items[index].id).value = true;
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selected.clear();
+      for (final notifier in _selectedSignals.values) {
+        notifier.value = false;
+      }
     });
   }
 
   void _toggleAllLoaded(List<AssetEntity> visible, bool select) {
     if (_deleting) return;
     setState(() {
-      final ids = visible.map((asset) => asset.id);
-      if (select) {
-        _selected.addAll(ids);
-      } else {
-        _selected.removeAll(ids);
+      for (final asset in visible) {
+        if (select) {
+          _selected.add(asset.id);
+        } else {
+          _selected.remove(asset.id);
+        }
+        _selectedSignal(asset.id).value = select;
       }
     });
   }
 
   void _showPreview(AssetEntity asset) {
+    final items = _visible;
+    final index = items.indexWhere((item) => item.id == asset.id);
+    if (index < 0) return;
+    _focusAndSelectWithoutScroll(index, items);
     showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1100, maxHeight: 800),
-          child: Stack(children: [
-            Center(child: AssetEntityImage(
-              asset,
-              isOriginal: false,
-              thumbnailSize: const ThumbnailSize(1800, 1800),
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image_outlined, color: Colors.white),
-            )),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton.filledTonal(
-                tooltip: 'Close preview',
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ]),
-        ),
+      barrierColor: const Color(0x99000000),
+      builder: (_) => PhotoPreviewDialog(
+        initialIndex: index,
+        items: () => _visible,
+        hasMore: () => _hasMore,
+        loadMore: () => _fetchNext(_generation),
+        selected: (id) => _selected.contains(id),
+        visit: (item) {
+          final current = _visible;
+          final next = current.indexWhere((value) => value.id == item.id);
+          if (next >= 0) {
+            _focusAndSelect(next, current,
+                galleryColumnCount(MediaQuery.sizeOf(context).width));
+          }
+        },
+        toggle: _toggleAsset,
+        delete: _deleteSelected,
+        keep: _keepSelected,
       ),
-    );
+    ).whenComplete(() {
+      if (mounted) _gridFocus.requestFocus();
+    });
   }
 
   KeyEventResult _handleGridKeys(FocusNode node, KeyEvent event) {
@@ -389,8 +431,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.space) {
       final index = _focusedIndex < 0 ? 0 : _focusedIndex;
-      setState(() => _focusedIndex = index);
-      _toggleAsset(items[index]);
+      _toggleAsset(items[index]); // Space alone toggles keyboard selection.
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.enter ||
@@ -399,9 +440,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _showPreview(items[index]);
       return KeyEventResult.handled;
     }
-    final width = MediaQuery.sizeOf(context).width;
-    final cols = ((width - (width >= 850 ? 244 : 0)) / 160)
-        .floor().clamp(2, 10);
+    if (key == LogicalKeyboardKey.delete ||
+        key == LogicalKeyboardKey.backspace) {
+      if (_selected.isNotEmpty) _deleteSelected();
+      return KeyEventResult.handled;
+    }
+    final cols = galleryColumnCount(MediaQuery.sizeOf(context).width);
     int delta;
     if (key == LogicalKeyboardKey.arrowRight) {
       delta = 1;
@@ -433,14 +477,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _focusAndSelect(int index, List<AssetEntity> items, int cols) {
-    setState(() {
-      _focusedIndex = index;
-      _selected.add(items[index].id);
-    });
+    _focusAndSelectWithoutScroll(index, items);
     if (!_scroll.hasClients) return;
-    final width = MediaQuery.sizeOf(context).width - 
-        (MediaQuery.sizeOf(context).width >= 850 ? 244 : 0);
-    final edge = (width - 24 - (cols - 1) * 6) / cols;
+    final window = MediaQuery.sizeOf(context).width;
+    final available = window - (window >= 850 ? 244 : 0);
+    final edge = (available - 24 - (cols - 1) * 6) / cols;
     final position = 8 + (index ~/ cols) * (edge + 6);
     final low = _scroll.offset;
     final high = low + _scroll.position.viewportDimension - edge - 18;
@@ -450,7 +491,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : position - _scroll.position.viewportDimension + edge + 20;
       _scroll.animateTo(
         target.clamp(0.0, _scroll.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 170),
+        duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
       );
     }
@@ -496,7 +537,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final visible = _visible;
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 850;
-    final cols = ((width - (isWide ? 244 : 0)) / 160).floor().clamp(2, 10);
+    final cols = galleryColumnCount(width);
     final allLoadedSelected = visible.isNotEmpty &&
         visible.every((item) => _selected.contains(item.id));
     return Scaffold(
@@ -584,7 +625,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   Text('${_selected.length} selected',
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   TextButton.icon(
-                    onPressed: _deleting ? null : () => setState(() => _selected.clear()),
+                    onPressed: _deleting ? null : _clearSelection,
                     icon: const Icon(Icons.close, size: 18),
                     label: const Text('Clear'),
                   ),
@@ -604,21 +645,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
       bottomNavigationBar: _selected.isEmpty ? null : SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Align(
-            heightFactor: 1,
-            alignment: Alignment.centerRight,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: FilledButton.icon(
-            onPressed: _deleting ? null : _deleteSelected,
-            icon: _deleting
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.delete_outline),
-            label: Text(_deleting
-                ? 'Waiting for Photos…'
-                : 'Delete ${_selected.length} selected'),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+          child: SizedBox(
+            height: 64,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(200, 56),
+                        foregroundColor: const Color(0xFF005C62),
+                        textStyle: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: _deleting ? null : _keepSelected,
+                      icon: const Icon(Icons.bookmark_add_outlined),
+                      label: const Text('Keep in Keepers'),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(265, 56),
+                        backgroundColor: const Color(0xFFB42333),
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: _deleting ? null : _deleteSelected,
+                      icon: _deleting
+                          ? const SizedBox(width: 20, height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.delete_forever_outlined, size: 24),
+                      label: Text(_deleting ? 'Working…'
+                          : 'Delete ${_selected.length} selected'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
