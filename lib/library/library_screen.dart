@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
+import 'photo_gallery_tile.dart';
+import 'photo_preview_dialog.dart';
 
 import 'filtering.dart';
 import 'library_repository.dart';
@@ -22,6 +23,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
   int _focusedIndex = -1;
   final List<AssetEntity> _assets = <AssetEntity>[];
+  final Set<String> _keeperIds = <String>{};
+  Map<String, ValueNotifier<bool>> _selectedSignals = {};
+  Map<String, ValueNotifier<bool>> _focusedSignals = {};
   final Set<String> _selected = <String>{};
 
   AssetPathEntity? _album;
@@ -51,6 +55,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void dispose() {
     _generation++;
     _gridFocus.dispose();
+    for (final value in _selectedSignals.values) { value.dispose(); }
+    for (final value in _focusedSignals.values) { value.dispose(); }
     _scroll.dispose();
     super.dispose();
   }
@@ -62,6 +68,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _reload({bool requestPermission = false}) async {
     final generation = ++_generation;
+    final oldSelection = _selectedSignals;
+    final oldFocus = _focusedSignals;
+    _selectedSignals = {};
+    _focusedSignals = {};
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final value in oldSelection.values) { value.dispose(); }
+      for (final value in oldFocus.values) { value.dispose(); }
+    });
     setState(() {
       _loading = true;
       _loadingMore = false;
@@ -72,6 +86,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _error = null;
       _assets.clear();
       _selected.clear();
+      _keeperIds.clear();
       _focusedIndex = -1;
     });
     try {
@@ -89,6 +104,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
       if (!mounted || generation != _generation) return;
       final userAlbums = LibraryRepository.userAlbums(collections);
+      final keepers = LibraryRepository.keepersAlbum(collections);
+      final keeperIds = keepers == null
+          ? <String>{}
+          : await _repository.keeperAssetIds(keepers);
+      if (!mounted || generation != _generation) return;
       final screenshots = LibraryRepository.smartAlbum(
         collections, PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
       );
@@ -100,6 +120,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
       setState(() {
         _userAlbums = userAlbums;
+        _keeperIds.addAll(keeperIds);
         _showRecordings = recordings != null;
       });
       AssetPathEntity? album;
@@ -112,6 +133,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         }
       } else if (_filter == MediaFilter.screenshots) {
         album = screenshots;
+      } else if (_filter == MediaFilter.keepers) {
+        album = keepers;
       } else if (_filter == MediaFilter.favorites && favorites != null) {
         album = favorites;
       } else if (_filter == MediaFilter.screenRecordings) {
@@ -170,7 +193,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  List<AssetEntity> get _visible => _assets.where((asset) => isVisible(
+  List<AssetEntity> get _visible => _assets.where((asset) =>
+      (_filter != MediaFilter.screenshots || _albumId != null ||
+          !_keeperIds.contains(asset.id)) &&
+      isVisible(
         filter: _albumId != null ? MediaFilter.all : _filter,
         type: asset.type,
         favorite: asset.isFavorite,
@@ -233,6 +259,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         Expanded(child: ListView(children: [
           _sidebarTile(context, Icons.screenshot_monitor_outlined,
             'Screenshots', MediaFilter.screenshots, closeDrawer: closeDrawer),
+          _sidebarTile(context, Icons.bookmark_rounded,
+            'Keepers', MediaFilter.keepers, closeDrawer: closeDrawer),
           _sidebarTile(context, Icons.photo_library_outlined,
             'All Media', MediaFilter.all, closeDrawer: closeDrawer),
           _sidebarTile(context, Icons.photo_outlined,
@@ -258,6 +286,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: Text('No albums found', style: TextStyle(fontSize: 12)),
             ),
           for (final album in _userAlbums)
+            if (album.name != LibraryRepository.keeperAlbumName)
             _sidebarTile(context, Icons.folder_outlined, album.name,
               MediaFilter.all, albumId: album.id, closeDrawer: closeDrawer),
         ])),
@@ -270,6 +299,35 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _keepSelected() async {
+    if (_deleting) return;
+    final chosen = _assets.where(
+        (asset) => _selected.contains(asset.id)).toList();
+    if (chosen.isEmpty) return;
+    setState(() => _deleting = true);
+    try {
+      final saved = await _repository.addToKeepers(chosen);
+      if (!mounted) return;
+      setState(() {
+        _keeperIds.addAll(chosen.map((item) => item.id));
+        _selected.clear();
+        for (final signal in _selectedSignals.values) {
+          signal.value = false;
+        }
+        _deleting = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved $saved to Siftidy Keepers in Apple Photos.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to save to Keepers: $error')),
+      );
+    }
   }
 
   void _toggleAsset(AssetEntity asset) {
@@ -401,6 +459,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _deleteSelected() async {
     final chosen = _assets.where((asset) => _selected.contains(asset.id)).toList();
     if (chosen.isEmpty || _deleting) return;
+    if (chosen.any((item) => _keeperIds.contains(item.id))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Keepers are protected from deletion in Siftidy.'),
+      ));
+      return;
+    }
     setState(() => _deleting = true);
     try {
       final deleted = await _repository.delete(chosen.map((e) => e.id).toList());
@@ -481,8 +545,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               fontWeight: FontWeight.bold,
             )),
             const SizedBox(height: 4),
-            Text('${_assets.length} loaded · $_libraryCount in this view · 25 per page',
-                style: Theme.of(context).textTheme.bodySmall),
+            Wrap(spacing: 18, runSpacing: 4, children: [
+              Text('Loaded: ${_visible.length} of $_libraryCount',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                  color: Color(0xFF27383D))),
+              const Text('25 at a time',
+                style: TextStyle(fontSize: 13, color: Color(0xFF27383D))),
+            ]),
             const SizedBox(height: 9),
             Wrap(
               spacing: 12,
