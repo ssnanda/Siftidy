@@ -1,4 +1,5 @@
 // ignore_for_file: prefer_interpolation_to_compose_strings
+import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -45,16 +46,24 @@ class MacQuickUpdater {
       return 'Move Siftidy.app into /Applications (or ~/Applications), '
           'launch it from there, then retry.';
     }
-    final writable = await Process.run('/usr/bin/test',
-        ['-w', Directory(current).parent.path]);
-    if (writable.exitCode != 0) {
-      return 'Applications is not writable. Please install the ZIP manually.';
-    }
-
-    final temp = await Directory.systemTemp.createTemp('siftidy-update-');
-    final zip = File(temp.path + '/download.zip');
-    final stage = Directory(temp.path + '/extracted');
+    Directory? temp;
+    var helperStarted = false;
     try {
+      progress('Checking Applications folder permissions…');
+      final writable = await Process.run('/usr/bin/test',
+        ['-w', Directory(current).parent.path],
+      ).timeout(const Duration(seconds: 8));
+      if (writable.exitCode != 0) {
+        return 'Your Applications folder is not writable by this account. '
+            'Download the ZIP and replace the app manually.';
+      }
+
+      progress('Preparing the update download…');
+      temp = await Directory.systemTemp
+          .createTemp('siftidy-update-')
+          .timeout(const Duration(seconds: 8));
+      final zip = File('${temp.path}/download.zip');
+      final stage = Directory('${temp.path}/extracted');
       progress('Downloading Siftidy $version…');
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 15);
@@ -128,17 +137,33 @@ class MacQuickUpdater {
       await Process.start('/bin/sh', [
         script.path, current, next, pid.toString(),
         temp.path, logs.path + '/updater.log',
-      ], mode: ProcessStartMode.detached);
-      // The external helper replaces this bundle after the current process exits.
+      ], mode: ProcessStartMode.detached).timeout(const Duration(seconds: 10));
+      helperStarted = true;
+      // The detached helper waits for this process to quit and rolls back
+      // if copying the new app fails. Do not delete the staged files.
       exit(0);
+    } on TimeoutException {
+      return 'The update timed out. Please retry or download the ZIP from '
+          'GitHub Releases.';
     } catch (error) {
-      return 'Unable to start quick update: $error';
+      return 'The update could not start: $error';
+    } finally {
+      if (!helperStarted && temp != null) {
+        try {
+          if (await temp.exists()) {
+            await temp.delete(recursive: true);
+          }
+        } catch (_) {
+          // Never conceal the original update error due to cleanup.
+        }
+      }
     }
   }
 
   Future<String> _plist(String app, String key) async {
     final result = await Process.run('/usr/libexec/PlistBuddy',
-        ['-c', 'Print :$key', app + '/Contents/Info.plist']);
+        ['-c', 'Print :$key', app + '/Contents/Info.plist'])
+        .timeout(const Duration(seconds: 8));
     return result.exitCode == 0 ? result.stdout.toString().trim() : '';
   }
 
@@ -172,10 +197,17 @@ if ! /bin/mv "$TARGET" "$BACKUP"; then
   exit 1
 fi
 if /bin/mv "$NEW" "$TARGET"; then
-  echo "Installed new Siftidy."
-  /usr/bin/open "$TARGET" || true
-  /bin/rm -rf "$BACKUP"
-  /bin/rm -rf "$WORK"
+  echo "Replaced Siftidy. Launching the updated app."
+  if /usr/bin/open "$TARGET"; then
+    echo "Launch requested successfully."
+    /bin/rm -rf "$BACKUP"
+    /bin/rm -rf "$WORK"
+  else
+    echo "Launch failed; attempting to restore original app."
+    /bin/mv "$TARGET" "$NEW" || true
+    /bin/mv "$BACKUP" "$TARGET" || true
+    /usr/bin/open "$TARGET" || true
+  fi
 else
   /bin/mv "$BACKUP" "$TARGET" || true
   echo "Replacement failed; restored original."
