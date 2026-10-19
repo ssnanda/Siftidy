@@ -24,7 +24,7 @@ void main() {
       'assets': [
         {
           'name': 'Siftidy-macOS-universal-v0.2.0.zip',
-          'digest': 'sha256:' + 'a' * 64,
+          'digest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           'size': 123456,
           'browser_download_url':
               'https://github.com/ssnanda/Siftidy/releases/download/v0.2.0/Siftidy-macOS-universal-v0.2.0.zip',
