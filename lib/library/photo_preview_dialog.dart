@@ -32,7 +32,8 @@ class PhotoPreviewDialog extends StatefulWidget {
   final ValueChanged<AssetEntity> toggle;
   /// Delete only the image currently being previewed, not the grid selection.
   final Future<bool> Function(AssetEntity) delete;
-  final VoidCallback keep;
+  /// Keep only the current preview photo, independent of other selections.
+  final Future<bool> Function(AssetEntity) keep;
 
   @override
   State<PhotoPreviewDialog> createState() => _PhotoPreviewDialogState();
@@ -119,10 +120,37 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
 
   void _close() => Navigator.of(context).pop();
 
-  void _closeThen(VoidCallback action) {
+  Future<void> _keepCurrent() async {
     if (_fetching || _deleting) return;
-    _close();
-    action();
+    final photos = widget.items();
+    if (_index < 0 || _index >= photos.length) return;
+    final current = photos[_index];
+    setState(() => _deleting = true);
+    try {
+      final kept = await widget.keep(current);
+      if (!mounted || !kept) return;
+      var remaining = widget.items();
+      if (_index >= remaining.length && widget.hasMore()) {
+        await widget.loadMore();
+        if (!mounted) return;
+        remaining = widget.items();
+      }
+      if (remaining.isEmpty) {
+        _close();
+        return;
+      }
+      final stillVisible = remaining.indexWhere((item) => item.id == current.id);
+      // If Keepers removed the photo from Screenshots, stay at the same
+      // position (now the next photo). Other views advance one position.
+      final target = stillVisible == -1
+          ? math.min(_index, remaining.length - 1)
+          : math.min(stillVisible + 1, remaining.length - 1);
+      widget.visit(remaining[target]);
+      setState(() => _index = target);
+      _focusNode.requestFocus();
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -271,7 +299,7 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
                                         IconButton(
                                           tooltip: 'Keep in Keepers',
                                           onPressed: _deleting
-                                              ? null : () => _closeThen(widget.keep),
+                                              ? null : _keepCurrent,
                                           color: Colors.white,
                                           icon: const Icon(Icons.bookmark_add_outlined),
                                         ),

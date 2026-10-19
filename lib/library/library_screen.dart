@@ -5,6 +5,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'photo_gallery_tile.dart';
 import 'photo_preview_dialog.dart';
 import 'photo_preview_geometry.dart';
+import 'gallery_selection.dart';
 
 import 'filtering.dart';
 import 'library_repository.dart';
@@ -190,8 +191,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
       setState(() {
         // A deletion can move PhotoKit's page boundary. When a page is
         // re-read, append only new asset IDs to avoid duplicates and skips.
-        final existingIds = _assets.map((item) => item.id).toSet();
-        final unique = batch.where((item) => !existingIds.contains(item.id));
+        final unique = unseenPageItems(
+          _assets,
+          batch,
+          (AssetEntity item) => item.id,
+        );
         _assets.addAll(unique);
         _visibleCache.addAll(unique.where(_isVisibleAsset));
         _nextPage++;
@@ -318,36 +322,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Future<void> _keepSelected() async {
-    if (_deleting) return;
-    final chosen = _assets.where(
-        (asset) => _selected.contains(asset.id)).toList();
-    if (chosen.isEmpty) return;
+  Future<bool> _keepAssets(List<AssetEntity> chosen) async {
+    if (_deleting || chosen.isEmpty) return false;
     setState(() => _deleting = true);
     try {
       final saved = await _repository.addToKeepers(chosen);
-      if (!mounted) return;
+      if (!mounted) return false;
+      final keptIds = chosen.map((item) => item.id).toSet();
       setState(() {
-        _keeperIds.addAll(chosen.map((item) => item.id));
+        _keeperIds.addAll(keptIds);
         if (_filter == MediaFilter.screenshots && _albumId == null) {
-          _visibleCache.removeWhere((item) => _keeperIds.contains(item.id));
+          _visibleCache.removeWhere((item) => keptIds.contains(item.id));
         }
-        _selected.clear();
-        for (final signal in _selectedSignals.values) {
-          signal.value = false;
+        _selected.removeAll(keptIds);
+        for (final id in keptIds) {
+          _selectedSignals[id]?.value = false;
+          _focusedSignals[id]?.value = false;
         }
+        _focusedIndex = -1;
         _deleting = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved $saved to Siftidy Keepers in Apple Photos.')),
+        SnackBar(content: Text('Saved $saved item(s) to Siftidy Keepers.')),
       );
+      return saved == chosen.length;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _deleting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to save to Keepers: $error')),
       );
+      return false;
     }
+  }
+
+  Future<void> _keepSelected() async {
+    final chosen = _assets.where((asset) => _selected.contains(asset.id))
+        .toList(growable: false);
+    await _keepAssets(chosen);
   }
 
   ValueNotifier<bool> _selectedSignal(String id) =>
@@ -370,22 +382,33 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _toggleAsset(AssetEntity asset) {
-    _setSelected(asset, !_selected.contains(asset.id));
+    if (_deleting) return;
+    setState(() {
+      final selected = togglePhotoMembership(_selected, asset.id);
+      _selectedSignal(asset.id).value = selected;
+    });
   }
 
-  void _focusAndSelectWithoutScroll(
-      int index, List<AssetEntity> items) {
-    if (index < 0 || index >= items.length) return;
-    final old = _focusedIndex;
+  /// A click changes selection. Keyboard/preview navigation only adds selection.
+  void _focusPhoto(int index, List<AssetEntity> items, {bool toggle = false}) {
+    if (_deleting || index < 0 || index >= items.length) return;
+    final previous = _focusedIndex;
+    final current = items[index];
     setState(() {
       _focusedIndex = index;
-      _selected.add(items[index].id);
-      _selectedSignal(items[index].id).value = true;
+      final selected = toggle
+          ? togglePhotoMembership(_selected, current.id)
+          : (_selected.add(current.id) || _selected.contains(current.id));
+      _selectedSignal(current.id).value = selected;
     });
-    if (old >= 0 && old != index && old < items.length) {
-      _focusedSignal(items[old].id).value = false;
+    if (previous >= 0 && previous != index && previous < items.length) {
+      _focusedSignal(items[previous].id).value = false;
     }
-    _focusedSignal(items[index].id).value = true;
+    _focusedSignal(current.id).value = true;
+  }
+
+  void _focusAndSelectWithoutScroll(int index, List<AssetEntity> items) {
+    _focusPhoto(index, items);
   }
 
   void _clearSelection() {
@@ -438,7 +461,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           final deleted = await _deleteAssets([asset], selectNext: false);
           return deleted.contains(asset.id);
         },
-        keep: _keepSelected,
+        keep: (asset) => _keepAssets([asset]),
       ),
     ).whenComplete(() {
       if (mounted) _gridFocus.requestFocus();
@@ -848,8 +871,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 keeper: _keeperIds.contains(asset.id),
                 onClick: () {
                   _gridFocus.requestFocus();
-                  _focusAndSelectWithoutScroll(index, visible);
-                  _setSelected(asset, true);
+                  _focusPhoto(index, visible, toggle: true);
                 },
                 onPreview: () {
                   _gridFocus.requestFocus();
