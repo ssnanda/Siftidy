@@ -94,11 +94,11 @@ class LibraryRepository {
     }
     var added = 0;
     for (final asset in assets) {
-      final result = await PhotoManager.editor.copyAssetToPath(
+      await PhotoManager.editor.copyAssetToPath(
         asset: asset,
         pathEntity: keeper,
       );
-      if (result != null) added++;
+      added++;
     }
     return added;
   }
