@@ -743,7 +743,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     return CustomScrollView(
       controller: _scroll,
-      cacheExtent: 900,
+      scrollCacheExtent: 900,
       slivers: [
 
         SliverPadding(

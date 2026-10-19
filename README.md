@@ -11,9 +11,11 @@ Siftidy is currently a **macOS-only hobby project**. iOS development and distrib
 - Load **25 images per page**, with automatic progressive loading as you scroll or explicit Load More.
 - **Single-click to select/deselect** and build multi-selection; grid clicks do not open a photo preview.
 - **All loaded** checkbox applies to currently loaded items in the current view, not the entire Photos library.
-- **Double-click** opens a preview even when many photos are selected. **Arrow keys** move the highlighted selection, **Space** toggles an item, and **Enter** opens its preview.
+- **Double-click** opens preview. In the grid, **Arrow keys** select and move focus, **Space** toggles selection, **Enter** opens preview, and **Delete** deletes selected items. In preview, **arrows** navigate and select without deselecting, **Space** toggles only the current photo, and **Enter** closes preview.
+- **Keep in Keepers** saves a screenshot to a real Apple Photos album named **Siftidy Keepers**. Kept screenshots are excluded from Siftidy's default Screenshots view and protected from Siftidy's Delete action. This does not remove their native screenshot classification in Apple Photos.
+- The grid uses fixed cached thumbnail tiles and updates lightweight selection overlays instead of re-decoding photos on every click.
 - **Privacy & Security** shortcut in the update dialog opens macOS Settings (Apple's Open Anyway action itself cannot be deep-linked).
-- **Delete selected** immediately requests deletion through Apple Photos. Siftidy does **not** add any confirmation dialog; macOS Photos may still show a system confirmation.
+- The larger, high-contrast **Delete selected** button (or the keyboard Delete key) immediately requests deletion through Apple Photos. Siftidy adds no dialog; Apple Photos may still show a system confirmation.
 - Photo/video thumbnails, sorting by age, refresh, optional estimated size inspection, Photos permission handling.
 - macOS update checks via public GitHub Releases, configurable on/off, with a one-click **Update & Restart** action for writable Applications installations.
 
