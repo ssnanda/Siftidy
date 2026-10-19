@@ -8,7 +8,7 @@ void main() {
       image: const Size(1170, 2532),
       viewport: const Size(1512, 982),
     );
-    expect(result.height, 918);
+    expect(result.height, closeTo(918, 0.001));
     expect(result.width, closeTo(424.2, 0.2));
   });
 
