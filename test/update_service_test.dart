@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:siftidy/updates/update_service.dart';
 import 'package:siftidy/updates/mac_quick_updater.dart';
@@ -47,6 +49,22 @@ void main() {
       }],
     }, '0.1.4');
     expect(status.state, UpdateState.unpublished);
+  });
+
+  test('writable installation folders are probed without leftover files',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('siftidy-permissions-');
+    try {
+      expect(await MacQuickUpdater.canWriteInstallDirectory(directory.path),
+          isTrue);
+      expect(await directory.list().isEmpty, isTrue);
+      expect(
+          await MacQuickUpdater.canWriteInstallDirectory(
+              '${directory.path}/does-not-exist'),
+          isFalse);
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   test('quick updater only targets Applications app bundles', () {
