@@ -9,6 +9,18 @@ command -v /usr/libexec/PlistBuddy >/dev/null || {
 flutter create --project-name siftidy --org com.siftidy --platforms=macos .
 flutter pub get
 
+# Generate recognizable Finder/Dock icons from the same vector design used
+# by the Flutter header. The macOS runner is generated, never committed.
+ICON_SET='macos/Runner/Assets.xcassets/AppIcon.appiconset'
+ICON_MASTER="$(mktemp /tmp/siftidy-icon-XXXXXX.png)"
+trap 'rm -f "$ICON_MASTER"' EXIT
+swift scripts/render_macos_icon.swift "$ICON_MASTER"
+for px in 16 32 64 128 256 512 1024; do
+  sips -z "$px" "$px" "$ICON_MASTER" \
+    --out "$ICON_SET/app_icon_${px}.png" >/dev/null
+done
+echo 'Generated native Siftidy macOS app icons (16–1024px)'
+
 # Flutter may generate a sample test for 'MyApp', which this app does not use.
 # Never remove a real application test.
 if [[ -f test/widget_test.dart ]] && grep -q 'await tester.pumpWidget(const MyApp())' test/widget_test.dart; then

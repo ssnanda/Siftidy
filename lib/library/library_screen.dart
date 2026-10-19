@@ -5,6 +5,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'photo_gallery_tile.dart';
 import 'photo_preview_dialog.dart';
 import 'photo_preview_geometry.dart';
+import '../branding/siftidy_mark.dart';
 import 'gallery_selection.dart';
 
 import 'filtering.dart';
@@ -661,11 +662,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
         child: _buildSidebar(context, closeDrawer: true),
       )),
       appBar: AppBar(
-        title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Siftidy', style: TextStyle(fontWeight: FontWeight.w800)),
-          Text('Your photos. Your choice. On your device.',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal)),
-        ]),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SiftidyMark(size: 38),
+            SizedBox(width: 10),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Siftidy', style: TextStyle(fontWeight: FontWeight.w800)),
+              Text('Your photos. Your choice. On your device.',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal)),
+            ]),
+          ],
+        ),
         actions: [
           const UpdateButton(),
           IconButton(

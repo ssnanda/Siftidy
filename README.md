@@ -1,5 +1,7 @@
 # Siftidy for macOS
 
+![Siftidy photo-stack mark](assets/branding/siftidy_mark.svg)
+
 **Private, review-first Apple Photos cleanup on the Mac.**
 
 Siftidy is currently a **macOS-only hobby project**. iOS development and distribution have been discontinued. It runs locally through Flutter and PhotoKit; it never uploads your photo library to an application server. PhotoKit may use iCloud Photos as part of Apple's own system behavior.
@@ -37,3 +39,7 @@ The current release is intended for personal testing, not a notarized production
 ### Mac rendering compatibility
 
 Siftidy currently disables Flutter's default macOS Impeller renderer to investigate corrupted text/dialogs and stale frames. The build pipeline verifies the flag in the actual app ZIP. This is a compatibility workaround, and should be checked on the affected Mac before treating the issue as resolved. Newer releases also fix frozen update progress dialogs with visible errors and a ZIP fallback.
+
+## Siftidy branding
+
+The photo-stack icon is the Siftidy identity: layered photo cards, a golden sun, and teal/blue mountains. The editable vector design is at `assets/branding/siftidy_mark.svg`. The Flutter header paints a matching lightweight mark with no image decoding; the macOS bootstrap uses `scripts/render_macos_icon.swift` to generate matching icon assets from 16 to 1024 pixels for Finder and the Dock. The build ships those native icons as part of the macOS application, without any added image/network dependency.

@@ -37,6 +37,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: bash -n scripts/bootstrap_apple.sh
       - run: dart format lib test
       - run: flutter analyze
       - run: flutter test
