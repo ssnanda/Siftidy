@@ -4,7 +4,7 @@ Siftidy is now **macOS-only**; all further iOS maintenance and iPhone builds are
 
 | Version | Scope |
 | --- | --- |
-| v0.1.x | Apple Photos browsing; Screenshots smart album default, sidebar Albums/Favorites/Photos/Videos, 25-item paging, single-click multi-selection, explicit deletion review, universal Mac Releases |
+| v0.1.x | Apple Photos browsing; Screenshots smart album default, sidebar Albums/Favorites/Photos/Videos, 25-item paging, single-click multi-selection, explicit deletion review, ZIP-only universal Mac Releases, quick in-place updates, keyboard photo selection |
 | v0.2 | Exact duplicates, visual near-duplicates, screenshot/people/blur suggestions without automatic deletion |
 | v0.3 | Date, size, album and no-people combinations; protected favorites; scanning normal Mac folders |
 | v0.4 | Verified backup/archive and restore to local disks, NAS or Ubuntu storage |
