@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -84,7 +82,7 @@ class _UpdateButtonState extends State<UpdateButton> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, updateDialog) {
           final status = _status;
-          final base = Platform.isIOS ? 'AltStore' : 'GitHub Releases';
+          const base = 'GitHub Releases';
           final installed = status?.installedVersion ?? 'not checked';
           final latest = status?.latestVersion;
           return AlertDialog(
@@ -130,20 +128,15 @@ class _UpdateButtonState extends State<UpdateButton> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(dialogContext);
-                  if (Platform.isIOS) {
-                    final link = Uri.parse('altstore://source?url=${Uri.encodeComponent(altStoreSourceUrl)}');
-                    _openExternal(link);
-                  } else if (status?.downloadUrl != null) {
+                  if (status?.downloadUrl != null) {
                     _openExternal(status!.downloadUrl!);
                   } else {
                     _openExternal(Uri.parse(gitHubReleasesUrl));
                   }
                 },
-                child: Text(Platform.isIOS
-                    ? 'Open in AltStore'
-                    : status?.hasUpdate == true
-                        ? 'Download update'
-                        : 'GitHub Releases'),
+                child: Text(status?.hasUpdate == true
+                    ? 'Download update'
+                    : 'GitHub Releases'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),

@@ -9,30 +9,6 @@ void main() {
     expect(compareVersions('not-a-version', '1.0.0'), isNull);
   });
 
-  test('empty AltStore source does not invent an IPA', () {
-    final status = evaluateAltStore({'apps': []}, '0.1.0');
-    expect(status.state, UpdateState.unpublished);
-    expect(status.downloadUrl, isNull);
-  });
-
-  test('AltStore identifies a real newer version', () {
-    final status = evaluateAltStore({
-      'apps': [
-        {
-          'bundleIdentifier': siftidyBundleId,
-          'versions': [
-            {
-              'version': '0.2.0',
-              'downloadURL':
-                  'https://github.com/ssnanda/Siftidy/releases/download/v0.2.0/Siftidy-iOS.ipa',
-            },
-          ],
-        }
-      ]
-    }, '0.1.0');
-    expect(status.hasUpdate, isTrue);
-  });
-
   test('GitHub release without macOS installer is not installable', () {
     final status = evaluateGitHubRelease(
       {'tag_name': 'v0.2.0', 'assets': []},

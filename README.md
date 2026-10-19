@@ -1,50 +1,31 @@
-# Siftidy
+# Siftidy for macOS
 
-**Private, review-first media cleanup for iPhone and Mac.**
+**Private, review-first Apple Photos cleanup on the Mac.**
 
-Siftidy is a hobby project that helps organize and review your Apple Photos library without uploading photos to a server. The app is at **v0.1 (early development)**. Pushes to `main` create versioned unsigned IPA and universal macOS GitHub Releases; releases are not Apple notarized.
+Siftidy is currently a **macOS-only hobby project**. iOS development and distribution have been discontinued. It runs locally through Flutter and PhotoKit; it never uploads your photo library to an application server. PhotoKit may use iCloud Photos as part of Apple's own system behavior.
 
-## v0.1 — what is implemented
+## Features
 
-- One Flutter UI for **iOS and macOS** using the platform-backed `photo_manager` (PhotoKit) integration.
-- Local media thumbnails, fullscreen photo preview, basic video thumbnail preview.
-- Photos, videos, and favorites filters; oldest/newest ordering.
-- Paged library loading (100 assets per request), load-more and refresh.
-- Long-press/tap selection and select-currently-loaded-media.
-- Explicit selected-items review, optional file-size measurement with progress, and **two-step manual deletion** using the platform's Photos confirmation.
-- Handling of full/limited/denied permission states and system Settings.
-- GitHub Actions analysis and tests, automatic unsigned iPhone IPA + universal macOS ZIP/DMG release assets, and an AltStore feed.
+- Starts with the native Apple Photos **Screenshots** smart album.
+- Left sidebar with Screenshots, All Media, Photos, Videos, Favorites, Screen Recordings (if available), and existing user-created Photos albums.
+- Load **25 images per page**, with automatic progressive loading as you scroll or explicit Load More.
+- **Single-click to select/deselect** and build multi-selection; grid clicks do not open a photo preview.
+- **All loaded** checkbox applies to currently loaded items in the current view, not the entire Photos library.
+- **Delete selected** opens two review/confirmation steps before requesting deletion through Apple's Photos API.
+- Photo/video thumbnails, sorting by age, refresh, optional estimated size inspection, Photos permission handling.
+- macOS update checks via public GitHub Releases, configurable on/off.
 
-**Deletion warning:** When you delete items in Apple Photos, deletions can sync to other devices using iCloud Photos. Items normally move to Recently Deleted. Siftidy does not offer an instant undo, verified backup, or automatic duplicate cleanup in v0.1. Back up important media before testing deletion. The displayed size is an approximation and is **not** a guaranteed amount of immediately reclaimed device storage.
+**Important:** Deleting photos may sync deletions to iCloud Photos and other Apple devices. Photos normally moves them to Recently Deleted. Make backups before using deletion; estimated storage savings are not guaranteed.
 
-## Local development (requires a Mac)
+## Install and run
 
-1. Install recent stable Flutter, Xcode and CocoaPods and run `flutter doctor`.
-2. Clone this repository and run `./scripts/bootstrap_apple.sh` from the project root. This generates standard Flutter iOS/macOS runners locally and inserts required Photos permission strings and macOS entitlements.
-3. Run `flutter run -d macos` for a local Mac app, or use `flutter devices` and `flutter run -d <device-id>` for iOS. For a physical iPhone, configure your Apple Development signing team in `ios/Runner.xcworkspace` first.
-4. Run `flutter analyze` and `flutter test` for static and unit checks.
+[Latest macOS Releases](https://github.com/ssnanda/Siftidy/releases) include universal macOS ZIP and DMG packages for Intel and Apple Silicon. They are currently unsigned and unnotarized, so macOS may show a Gatekeeper warning. Do not disable Gatekeeper globally.
 
-Runner files under `ios/` and `macos/` are intentionally generated instead of committed: run bootstrap on a Mac after cloning and after `flutter clean` if you remove the runner. Do not run the app against irreplaceable photos until you've made a backup. An iPhone cannot build or run macOS Flutter apps without a Mac/Xcode build machine.
+For local development, install Flutter, Xcode and CocoaPods, clone this repository, then run `./scripts/bootstrap_apple.sh` followed by `flutter run -d macos`. Run `flutter analyze` and `flutter test` for source checks.
 
-## Project boundaries
+## Workflow
 
-- Local first: no user accounts, analytics, or photo telemetry. An optional automatic update check (on by default, switchable off) fetches only public GitHub Release or AltStore JSON version metadata. PhotoKit may communicate with iCloud as part of the system's Photos implementation.
-- v0.1 only: no perceptual similarity, no people detection, no ranking large files, no Mac arbitrary-folder scan, no NAS/Ubuntu verified backup, no iMessage or WhatsApp direct database access.
-- Favorites searches apply to **currently loaded batches**; load more to include older items. Full-library indexing is planned for later.
-- v0.1 video preview is a thumbnail, not a video player.
-- Apple Photos may prompt for final confirmation after Siftidy's two review steps.
+The only workflow file is `.github/workflows/siftidy.yml`:
+validation → universal macOS build → GitHub Releases (ZIP and DMG) → Actions cleanup. A successful Mac release also removes retired IPA assets from historical Releases, without deleting Mac packages or release tags. The obsolete AltStore feed and iOS build pipeline have been deleted.
 
-See [docs/ROADMAP.md](docs/ROADMAP.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/UPDATES.md](docs/UPDATES.md).
-
-## Update source
-
-- AltStore Classic JSON: https://raw.githubusercontent.com/ssnanda/Siftidy/main/altstore.json
-- macOS download releases: https://github.com/ssnanda/Siftidy/releases
-- Both platforms check on launch (configurable in the app) and provide a manual check; installation remains user-controlled.
-- Every push to `main` (excluding docs/AltStore-only edits) or manual Release workflow run builds an unsigned iPhone IPA suitable for AltStore Classic re-signing, plus both Intel/Apple Silicon macOS ZIP and DMG packages. Release numbers use `vMAJOR.MINOR.<workflow run number>`; the AltStore source is updated after the Release publishes.
-- iOS installation requires AltStore Classic (which re-signs the IPA); the published macOS builds are **unsigned and unnotarized**, so Gatekeeper may block them. Native signed/notarized releases require Apple Developer signing credentials.
-- CI removes generated iOS/macOS runners and temporary build directories after each release attempt. A scheduled cleanup and post-release cleanup delete completed workflow runs after 7 days while preserving the newest five per workflow. Published Releases, tags, and assets are **never deleted** by cleanup.
-
-## Single workflow
-
-Only `.github/workflows/siftidy.yml` is active. On main pushes it validates, builds an unsigned iOS device IPA and universal macOS ZIP/DMG, publishes GitHub Releases, and updates `altstore.json`. PRs validate only; manual `release`, `build`, `validate`, `cleanup` are available. Weekly scheduled cleanup and successful release cleanup remove completed runs of superseded Siftidy workflows and expired Actions artifacts. GitHub Releases and published app packages are never deleted.
+The current release is intended for personal testing, not a notarized production installation.

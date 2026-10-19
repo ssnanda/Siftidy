@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Initialize reproducible iOS and macOS Flutter runners and required Photos settings.
+# Initialize reproducible macOS Flutter runner and required Photos settings.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v flutter >/dev/null || { echo 'Flutter SDK is required.' >&2; exit 1; }
 command -v /usr/libexec/PlistBuddy >/dev/null || {
   echo 'Run this on macOS with Xcode installed.' >&2; exit 1;
 }
-flutter create --project-name siftidy --org com.siftidy --platforms=ios,macos .
+flutter create --project-name siftidy --org com.siftidy --platforms=macos .
 flutter pub get
 
 # Flutter may generate a sample test for 'MyApp', which this app does not use.
@@ -26,16 +26,14 @@ plist_set_bool() {
     /usr/libexec/PlistBuddy -c "Add :$key bool true" "$plist"
 }
 
-for plist in ios/Runner/Info.plist macos/Runner/Info.plist; do
-  plist_set_string "$plist" NSPhotoLibraryUsageDescription \
-    'Siftidy needs access to show, review and optionally delete media you select.'
-  plist_set_string "$plist" NSPhotoLibraryAddUsageDescription \
-    'Siftidy only changes your Photos library when you confirm an action.'
-done
+plist_set_string macos/Runner/Info.plist NSPhotoLibraryUsageDescription \
+  'Siftidy needs access to show, review and optionally delete media you select.'
+plist_set_string macos/Runner/Info.plist NSPhotoLibraryAddUsageDescription \
+  'Siftidy only changes your Photos library when you confirm an action.'
+plist_set_string macos/Runner/Info.plist CFBundleDisplayName 'Siftidy'
 for entitlements in macos/Runner/DebugProfile.entitlements macos/Runner/Release.entitlements; do
   plist_set_bool "$entitlements" com.apple.security.personal-information.photos-library
   plist_set_bool "$entitlements" com.apple.security.network.client
 done
 
-echo 'Ready: flutter run -d macos or flutter run -d <iOS device id>'
-echo 'For iOS devices, select your signing team in Xcode first.'
+echo 'Ready: flutter run -d macos'

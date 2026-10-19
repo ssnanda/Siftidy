@@ -3,7 +3,7 @@ name: 'Siftidy - Build, Release & Maintenance'
 on:
   push:
     branches: [main]
-    paths-ignore: [altstore.json, 'docs/**', '**/*.md']
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -45,7 +45,7 @@ jobs:
         run: rm -rf .dart_tool build dist artifacts
 
   build-and-publish:
-    name: Publish iPhone IPA and universal macOS
+    name: Publish universal macOS
     needs: validate
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'release' || inputs.task == 'build')) }}
     runs-on: macos-latest
@@ -73,11 +73,9 @@ jobs:
           echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Generate Apple runners and Photos permissions
         run: ./scripts/bootstrap_apple.sh
-      - name: Build unsigned iPhone device IPA for AltStore
-        run: flutter build ios --release --no-codesign --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
       - name: Build universal macOS
         run: flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
-      - name: Package and verify IPA, ZIP and DMG
+      - name: Package and verify macOS ZIP and DMG
         run: ./scripts/package_release.sh
       - name: Upload build-only artifacts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'build' }}
@@ -96,29 +94,11 @@ jobs:
           set -euo pipefail
           gh release create "$RELEASE_TAG" dist/* \
             --target "$GITHUB_SHA" --title "Siftidy $RELEASE_VERSION" --latest \
-            --notes "Unsigned IPA for AltStore Classic re-signing; universal macOS ZIP and DMG for Intel and Apple Silicon (not notarized). Back up irreplaceable photos before testing."
+            --notes "Universal macOS ZIP and DMG for Intel and Apple Silicon. Not Apple Developer ID signed or notarized. Back up irreplaceable photos before testing."
           gh release view "$RELEASE_TAG" --json url,assets --jq '{url,assets:[.assets[].name]}'
-      - name: Refresh AltStore JSON
-        if: ${{ github.event_name == 'push' || inputs.task == 'release' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # The build can outlive newer commits to main; sync the latest tree first.
-          git fetch origin main
-          git reset --hard origin/main
-          python3 scripts/sync_altstore.py "$GITHUB_REPOSITORY" "$RELEASE_TAG"
-          git add altstore.json
-          if ! git diff --cached --quiet; then
-            git -c user.name='github-actions[bot]' \
-              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-              commit -m "chore(release): update AltStore JSON [skip ci]"
-            git push origin HEAD:main
-          fi
       - name: Cleanup generated build directories
         if: always()
-        run: rm -rf build dist .dart_tool ios macos
+        run: rm -rf build dist .dart_tool macos
 
   cleanup-history:
     name: Cleanup old Actions runs and artifacts
@@ -127,10 +107,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
       actions: write
     steps:
       - uses: actions/checkout@v4
+      - name: Remove retired iPhone IPA assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/delete_legacy_ipas.py
       - name: Remove old completed workflows and ephemeral artifacts
         env:
           GH_TOKEN: ${{ github.token }}

@@ -3,13 +3,10 @@ import 'dart:io';
 
 import 'package:package_info_plus/package_info_plus.dart';
 
-const String altStoreSourceUrl =
-    'https://raw.githubusercontent.com/ssnanda/Siftidy/main/altstore.json';
 const String gitHubReleasesUrl =
     'https://github.com/ssnanda/Siftidy/releases';
 const String gitHubLatestReleaseApi =
     'https://api.github.com/repos/ssnanda/Siftidy/releases/latest';
-const String siftidyBundleId = 'com.siftidy.siftidy';
 
 enum UpdateState { available, current, unpublished, failed }
 
@@ -50,56 +47,6 @@ int? compareVersions(String installed, String published) {
     if (x != y) return x.compareTo(y);
   }
   return 0;
-}
-
-UpdateStatus evaluateAltStore(
-    Map<String, dynamic> source, String installedVersion) {
-  final apps = source['apps'];
-  if (apps is! List) {
-    throw const FormatException('AltStore source is missing its apps list.');
-  }
-  for (final item in apps) {
-    if (item is! Map || item['bundleIdentifier'] != siftidyBundleId) {
-      continue;
-    }
-    final versions = item['versions'];
-    if (versions is! List || versions.isEmpty) break;
-    Map? latest;
-    for (final entry in versions) {
-      if (entry is! Map || entry['version'] is! String) continue;
-      if (latest == null ||
-          compareVersions(latest['version'] as String,
-                  entry['version'] as String) ==
-              -1) {
-        latest = entry;
-      }
-    }
-    if (latest == null) break;
-    final version = latest['version'] as String;
-    final url = Uri.tryParse(latest['downloadURL']?.toString() ?? '');
-    if (url == null || url.scheme != 'https' || url.host.isEmpty) break;
-    if (compareVersions(installedVersion, version) == -1) {
-      return UpdateStatus(
-        state: UpdateState.available,
-        message: 'Version $version is available through AltStore.',
-        installedVersion: installedVersion,
-        latestVersion: version,
-        downloadUrl: url,
-      );
-    }
-    return UpdateStatus(
-      state: UpdateState.current,
-      message: 'You have the latest published iOS version.',
-      installedVersion: installedVersion,
-      latestVersion: version,
-    );
-  }
-  return UpdateStatus(
-    state: UpdateState.unpublished,
-    message: 'The AltStore feed is online, but no signed iPhone IPA '
-        'has been published yet.',
-    installedVersion: installedVersion,
-  );
 }
 
 UpdateStatus evaluateGitHubRelease(
@@ -170,14 +117,9 @@ class UpdateService {
         return evaluateGitHubRelease(
             await _readJson(Uri.parse(gitHubLatestReleaseApi)), info.version);
       }
-      if (Platform.isIOS) {
-        final source = await _readJson(Uri.parse(altStoreSourceUrl));
-        if (source == null) throw const FormatException('Source not found.');
-        return evaluateAltStore(source, info.version);
-      }
       return UpdateStatus(
         state: UpdateState.unpublished,
-        message: 'Update checking is supported on iOS and macOS.',
+        message: 'Update checking is supported on macOS.',
         installedVersion: info.version,
       );
     } catch (_) {
