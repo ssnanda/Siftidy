@@ -22,6 +22,28 @@ class MacQuickUpdater {
         (parent == '/Applications' || parent == '$home/Applications');
   }
 
+  static Future<bool> canWriteInstallDirectory(String path) async {
+    Directory? probe;
+    try {
+      probe = await Directory(path)
+          .createTemp('.siftidy-write-check-')
+          .timeout(const Duration(seconds: 8));
+      return true;
+    } on FileSystemException {
+      return false;
+    } on TimeoutException {
+      return false;
+    } finally {
+      if (probe != null) {
+        try {
+          await probe.delete(recursive: true);
+        } catch (_) {
+          // A failed cleanup must not mask the write permission result.
+        }
+      }
+    }
+  }
+
   Future<String?> install(
       UpdateStatus status, void Function(String) progress) async {
     if (!Platform.isMacOS) return 'Updates work only on macOS.';
@@ -50,10 +72,8 @@ class MacQuickUpdater {
     var helperStarted = false;
     try {
       progress('Checking Applications folder permissions…');
-      final writable = await Process.run('/usr/bin/test',
-        ['-w', Directory(current).parent.path],
-      ).timeout(const Duration(seconds: 8));
-      if (writable.exitCode != 0) {
+      final writable = await canWriteInstallDirectory(Directory(current).parent.path);
+      if (!writable) {
         return 'Your Applications folder is not writable by this account. '
             'Download the ZIP and replace the app manually.';
       }
