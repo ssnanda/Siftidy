@@ -25,6 +25,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final List<AssetEntity> _assets = <AssetEntity>[];
   final List<AssetEntity> _visibleCache = <AssetEntity>[];
   final Set<String> _keeperIds = <String>{};
+  bool _keepersIndexed = false;
   Map<String, ValueNotifier<bool>> _selectedSignals = {};
   Map<String, ValueNotifier<bool>> _focusedSignals = {};
   final Set<String> _selected = <String>{};
@@ -88,7 +89,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _assets.clear();
       _visibleCache.clear();
       _selected.clear();
-      _keeperIds.clear();
+      if (requestPermission) {
+        _keeperIds.clear();
+        _keepersIndexed = false;
+      }
       _focusedIndex = -1;
     });
     try {
@@ -107,7 +111,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted || generation != _generation) return;
       final userAlbums = LibraryRepository.userAlbums(collections);
       final keepers = LibraryRepository.keepersAlbum(collections);
-      final keeperIds = keepers == null
+      final keeperIds = _keepersIndexed || keepers == null
           ? <String>{}
           : await _repository.keeperAssetIds(keepers);
       if (!mounted || generation != _generation) return;
@@ -123,6 +127,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       setState(() {
         _userAlbums = userAlbums;
         _keeperIds.addAll(keeperIds);
+        _keepersIndexed = true;
         _showRecordings = recordings != null;
       });
       AssetPathEntity? album;
