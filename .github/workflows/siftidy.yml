@@ -88,13 +88,12 @@ jobs:
         run: flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
       - name: Package and verify macOS ZIP
         run: ./scripts/package_release.sh
-      - name: Upload build-only artifacts
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'build' }}
+      - name: Upload ZIP as downloadable workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: siftidy-apple-build-${{ github.run_number }}
-          path: dist/*
-          retention-days: 3
+          path: dist/*.zip
+          retention-days: 7
           if-no-files-found: error
       - name: Publish to GitHub Releases
         if: ${{ github.event_name == 'push' || inputs.task == 'release' }}
