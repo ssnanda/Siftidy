@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
 import 'filtering.dart';
 import 'library_repository.dart';
-import 'selection_review.dart';
 import '../updates/update_button.dart';
+import '../updates/mac_quick_updater.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -18,6 +19,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   static const int _pageSize = 25;
   final LibraryRepository _repository = LibraryRepository();
   final ScrollController _scroll = ScrollController();
+  final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
+  int _focusedIndex = -1;
   final List<AssetEntity> _assets = <AssetEntity>[];
   final Set<String> _selected = <String>{};
 
@@ -47,6 +50,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   void dispose() {
     _generation++;
+    _gridFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -68,6 +72,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _error = null;
       _assets.clear();
       _selected.clear();
+      _focusedIndex = -1;
     });
     try {
       if (requestPermission || _permission == null || !_permission!.hasAccess) {
@@ -286,14 +291,116 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
-  Future<void> _reviewDeletion() async {
+  void _showPreview(AssetEntity asset) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100, maxHeight: 800),
+          child: Stack(children: [
+            Center(child: AssetEntityImage(
+              asset,
+              isOriginal: false,
+              thumbnailSize: const ThumbnailSize(1800, 1800),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.broken_image_outlined, color: Colors.white),
+            )),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton.filledTonal(
+                tooltip: 'Close preview',
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  KeyEventResult _handleGridKeys(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || _loading || _deleting) {
+      return KeyEventResult.ignored;
+    }
+    final items = _visible;
+    if (items.isEmpty) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.space) {
+      final index = _focusedIndex < 0 ? 0 : _focusedIndex;
+      setState(() => _focusedIndex = index);
+      _toggleAsset(items[index]);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      final index = _focusedIndex < 0 ? 0 : _focusedIndex;
+      _showPreview(items[index]);
+      return KeyEventResult.handled;
+    }
+    final width = MediaQuery.sizeOf(context).width;
+    final cols = ((width - (width >= 850 ? 244 : 0)) / 160)
+        .floor().clamp(2, 10);
+    int delta;
+    if (key == LogicalKeyboardKey.arrowRight) {
+      delta = 1;
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      delta = -1;
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      delta = cols;
+    } else if (key == LogicalKeyboardKey.arrowUp) {
+      delta = -cols;
+    } else {
+      return KeyEventResult.ignored;
+    }
+    final next = _focusedIndex < 0 ? 0 : _focusedIndex + delta;
+    if (next < 0) return KeyEventResult.handled;
+    if (next >= items.length) {
+      if (_hasMore && !_loadingMore) {
+        final wanted = next;
+        _fetchNext(_generation).then((_) {
+          if (!mounted) return;
+          final updated = _visible;
+          if (wanted >= updated.length) return;
+          _focusAndSelect(wanted, updated, cols);
+        });
+      }
+      return KeyEventResult.handled;
+    }
+    _focusAndSelect(next, items, cols);
+    return KeyEventResult.handled;
+  }
+
+  void _focusAndSelect(int index, List<AssetEntity> items, int cols) {
+    setState(() {
+      _focusedIndex = index;
+      _selected.add(items[index].id);
+    });
+    if (!_scroll.hasClients) return;
+    final width = MediaQuery.sizeOf(context).width - 
+        (MediaQuery.sizeOf(context).width >= 850 ? 244 : 0);
+    final edge = (width - 24 - (cols - 1) * 6) / cols;
+    final position = 8 + (index ~/ cols) * (edge + 6);
+    final low = _scroll.offset;
+    final high = low + _scroll.position.viewportDimension - edge - 18;
+    if (position < low || position > high) {
+      final target = position < low
+          ? position - 12
+          : position - _scroll.position.viewportDimension + edge + 20;
+      _scroll.animateTo(
+        target.clamp(0.0, _scroll.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 170),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Future<void> _deleteSelected() async {
     final chosen = _assets.where((asset) => _selected.contains(asset.id)).toList();
     if (chosen.isEmpty || _deleting) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => SelectionReview(items: chosen),
-    );
-    if (confirmed != true || !mounted) return;
     setState(() => _deleting = true);
     try {
       final deleted = await _repository.delete(chosen.map((e) => e.id).toList());
@@ -417,7 +524,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ]),
         ),
-        Expanded(child: _buildContent(visible, cols)),
+        Expanded(child: Focus(
+          focusNode: _gridFocus,
+          autofocus: true,
+          onKeyEvent: _handleGridKeys,
+          child: _buildContent(visible, cols),
+        )),
       ])),
       ]),
       bottomNavigationBar: _selected.isEmpty ? null : SafeArea(
@@ -430,14 +542,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
               child: FilledButton.icon(
-            onPressed: _deleting ? null : _reviewDeletion,
+            onPressed: _deleting ? null : _deleteSelected,
             icon: _deleting
                 ? const SizedBox(width: 18, height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.delete_outline),
             label: Text(_deleting
                 ? 'Waiting for Photos…'
-                : 'Delete ${_selected.length} selected…'),
+                : 'Delete ${_selected.length} selected'),
               ),
             ),
           ),
@@ -458,7 +570,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               textAlign: TextAlign.center),
           const SizedBox(height: 12),
           FilledButton(onPressed: PhotoManager.openSetting,
-              child: const Text('Open Settings')),
+              child: const Text('Photos Permissions')),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: openMacPrivacySecurity,
+            icon: const Icon(Icons.settings_outlined),
+            label: const Text('Privacy & Security'),
+          ),
           TextButton(onPressed: () => _reload(requestPermission: true),
               child: const Text('Try again')),
         ]),
@@ -497,7 +615,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 label: '${asset.type == AssetType.video ? "Video" : "Photo"} '
                     '${selected ? "selected" : "not selected"}',
                 child: InkWell(
-                  onTap: () => _toggleAsset(asset),
+                  onTap: () {
+                    _gridFocus.requestFocus();
+                    setState(() => _focusedIndex = index);
+                    _toggleAsset(asset);
+                  },
+                  onDoubleTap: () {
+                    _gridFocus.requestFocus();
+                    setState(() => _focusedIndex = index);
+                    _showPreview(asset);
+                  },
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: Stack(fit: StackFit.expand, children: [
@@ -513,10 +640,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                       if (selected) Container(
                         decoration: BoxDecoration(
-                          color: const Color(0x44008790),
-                          border: Border.all(color: const Color(0xFF008790), width: 4),
+                          color: const Color(0x16008790),
+                          border: Border.all(color: const Color(0xFF007982), width: 3),
                         ),
                       ),
+                      if (_focusedIndex == index)
+                        IgnorePointer(child: Container(
+                          decoration: BoxDecoration(border: Border.all(
+                            color: const Color(0xFFEDB53A), width: 2,
+                          )),
+                        )),
                       Positioned(
                         top: 5, right: 5,
                         child: Icon(
