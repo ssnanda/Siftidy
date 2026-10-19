@@ -23,6 +23,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
   int _focusedIndex = -1;
   final List<AssetEntity> _assets = <AssetEntity>[];
+  final List<AssetEntity> _visibleCache = <AssetEntity>[];
   final Set<String> _keeperIds = <String>{};
   Map<String, ValueNotifier<bool>> _selectedSignals = {};
   Map<String, ValueNotifier<bool>> _focusedSignals = {};
@@ -85,6 +86,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _album = null;
       _error = null;
       _assets.clear();
+      _visibleCache.clear();
       _selected.clear();
       _keeperIds.clear();
       _focusedIndex = -1;
@@ -180,6 +182,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted || generation != _generation) return;
       setState(() {
         _assets.addAll(batch);
+        _visibleCache.addAll(batch.where(_isVisibleAsset));
         _nextPage++;
         _hasMore = batch.length == _pageSize && _assets.length < _libraryCount;
         _loadingMore = false;
@@ -193,14 +196,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  List<AssetEntity> get _visible => _assets.where((asset) =>
+  bool _isVisibleAsset(AssetEntity asset) =>
       (_filter != MediaFilter.screenshots || _albumId != null ||
           !_keeperIds.contains(asset.id)) &&
       isVisible(
         filter: _albumId != null ? MediaFilter.all : _filter,
         type: asset.type,
         favorite: asset.isFavorite,
-      )).toList(growable: false);
+      );
+
+  /// Cached once per batch; selection never refilters the whole library.
+  List<AssetEntity> get _visible => _visibleCache;
 
   String get _viewName {
     if (_albumId != null) {
@@ -312,6 +318,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted) return;
       setState(() {
         _keeperIds.addAll(chosen.map((item) => item.id));
+        if (_filter == MediaFilter.screenshots && _albumId == null) {
+          _visibleCache.removeWhere((item) => _keeperIds.contains(item.id));
+        }
         _selected.clear();
         for (final signal in _selectedSignals.values) {
           signal.value = false;
@@ -513,6 +522,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final deletedSet = deleted.toSet();
       setState(() {
         _assets.removeWhere((item) => deletedSet.contains(item.id));
+        _visibleCache.removeWhere((item) => deletedSet.contains(item.id));
         _selected.removeAll(deletedSet);
         _libraryCount = (_libraryCount - deletedSet.length).clamp(0, 1 << 30).toInt();
         _deleting = false;
