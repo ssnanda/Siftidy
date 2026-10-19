@@ -15,7 +15,7 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  static const int _pageSize = 100;
+  static const int _pageSize = 25;
   final LibraryRepository _repository = LibraryRepository();
   final ScrollController _scroll = ScrollController();
   final List<AssetEntity> _assets = <AssetEntity>[];
@@ -23,13 +23,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   AssetPathEntity? _album;
   PermissionState? _permission;
-  MediaFilter _filter = MediaFilter.all;
+  MediaFilter _filter = MediaFilter.screenshots;
+  List<AssetPathEntity> _userAlbums = <AssetPathEntity>[];
+  String? _albumId;
+  bool _showRecordings = false;
   MediaSort _sort = MediaSort.newest;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _deleting = false;
-  bool _selecting = false;
   int _nextPage = 0;
   int _libraryCount = 0;
   int _generation = 0;
@@ -66,7 +68,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _error = null;
       _assets.clear();
       _selected.clear();
-      _selecting = false;
     });
     try {
       if (requestPermission || _permission == null || !_permission!.hasAccess) {
@@ -78,10 +79,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
         setState(() => _loading = false);
         return;
       }
-      final album = await _repository.openAll(
-        type: _filter.requestType,
+      final collections = await _repository.collections(
         oldestFirst: _sort == MediaSort.oldest,
       );
+      if (!mounted || generation != _generation) return;
+      final userAlbums = LibraryRepository.userAlbums(collections);
+      final screenshots = LibraryRepository.smartAlbum(
+        collections, PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
+      );
+      final favorites = LibraryRepository.smartAlbum(
+        collections, PMDarwinAssetCollectionSubtype.smartAlbumFavorites,
+      );
+      final recordings = LibraryRepository.smartAlbum(
+        collections, PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings,
+      );
+      setState(() {
+        _userAlbums = userAlbums;
+        _showRecordings = recordings != null;
+      });
+      AssetPathEntity? album;
+      if (_albumId != null) {
+        for (final item in userAlbums) {
+          if (item.id == _albumId) {
+            album = item;
+            break;
+          }
+        }
+      } else if (_filter == MediaFilter.screenshots) {
+        album = screenshots;
+      } else if (_filter == MediaFilter.favorites && favorites != null) {
+        album = favorites;
+      } else if (_filter == MediaFilter.screenRecordings) {
+        album = recordings;
+      } else {
+        album = await _repository.openAll(
+          type: _filter.requestType,
+          oldestFirst: _sort == MediaSort.oldest,
+        );
+      }
       if (!mounted || generation != _generation) return;
       if (album == null) {
         setState(() {
@@ -131,56 +166,124 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   List<AssetEntity> get _visible => _assets.where((asset) => isVisible(
-        filter: _filter,
+        filter: _albumId != null ? MediaFilter.all : _filter,
         type: asset.type,
         favorite: asset.isFavorite,
       )).toList(growable: false);
 
-  void _toggleAsset(AssetEntity asset) {
-    setState(() {
-      _selecting = true;
-      if (!_selected.add(asset.id)) _selected.remove(asset.id);
-      if (_selected.isEmpty) _selecting = false;
-    });
+  String get _viewName {
+    if (_albumId != null) {
+      for (final album in _userAlbums) {
+        if (album.id == _albumId) return album.name;
+      }
+    }
+    return _filter.label;
   }
 
-  void _showPreview(AssetEntity asset) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.black,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 920, maxHeight: 780),
-          child: Stack(children: <Widget>[
-            Center(child: AssetEntityImage(
-              asset,
-              isOriginal: false,
-              thumbnailSize: const ThumbnailSize(1600, 1600),
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.broken_image_outlined, color: Colors.white,
-              ),
-            )),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton.filledTonal(
-                tooltip: 'Close preview',
-                onPressed: () => Navigator.pop(dialogContext),
-                icon: const Icon(Icons.close),
-              ),
-            ),
-            if (asset.type == AssetType.video)
-              const Positioned(
-                bottom: 16,
-                left: 16,
-                child: Text('Video thumbnail • playback follows in a later release',
-                    style: TextStyle(color: Colors.white)),
-              ),
-          ]),
+  void _chooseView(MediaFilter filter, {String? albumId, bool closeDrawer = false}) {
+    if (_deleting || (_filter == filter && _albumId == albumId)) return;
+    setState(() {
+      _filter = filter;
+      _albumId = albumId;
+    });
+    if (closeDrawer) Navigator.pop(context);
+    _reload();
+  }
+
+  Widget _sidebarTile(
+    BuildContext context,
+    IconData icon,
+    String title,
+    MediaFilter filter, {
+    String? albumId,
+    bool closeDrawer = false,
+  }) {
+    final selected = _filter == filter && _albumId == albumId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: ListTile(
+        dense: true,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        selected: selected,
+        selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+        leading: Icon(icon, size: 20),
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        onTap: _deleting ? null : () => _chooseView(
+          filter, albumId: albumId, closeDrawer: closeDrawer,
         ),
       ),
     );
+  }
+
+  Widget _buildSidebar(BuildContext context, {bool closeDrawer = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
+          child: Text('BROWSE', style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
+          )),
+        ),
+        Expanded(child: ListView(children: [
+          _sidebarTile(context, Icons.screenshot_monitor_outlined,
+            'Screenshots', MediaFilter.screenshots, closeDrawer: closeDrawer),
+          _sidebarTile(context, Icons.photo_library_outlined,
+            'All Media', MediaFilter.all, closeDrawer: closeDrawer),
+          _sidebarTile(context, Icons.photo_outlined,
+            'Photos', MediaFilter.photos, closeDrawer: closeDrawer),
+          _sidebarTile(context, Icons.movie_outlined,
+            'Videos', MediaFilter.videos, closeDrawer: closeDrawer),
+          _sidebarTile(context, Icons.favorite_outline,
+            'Favorites', MediaFilter.favorites, closeDrawer: closeDrawer),
+          if (_showRecordings)
+            _sidebarTile(context, Icons.videocam_outlined,
+              'Screen Recordings', MediaFilter.screenRecordings,
+              closeDrawer: closeDrawer),
+          const Divider(height: 28, indent: 12, endIndent: 12),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
+            child: Text('APPLE PHOTOS ALBUMS', style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
+            )),
+          ),
+          if (_userAlbums.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: Text('No albums found', style: TextStyle(fontSize: 12)),
+            ),
+          for (final album in _userAlbums)
+            _sidebarTile(context, Icons.folder_outlined, album.name,
+              MediaFilter.all, albumId: album.id, closeDrawer: closeDrawer),
+        ])),
+        const Padding(
+          padding: EdgeInsets.all(14),
+          child: Text(
+            'Browse existing Photos albums. Selection never changes an album.',
+            style: TextStyle(fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _toggleAsset(AssetEntity asset) {
+    if (_deleting) return;
+    setState(() {
+      if (!_selected.add(asset.id)) _selected.remove(asset.id);
+    });
+  }
+
+  void _toggleAllLoaded(List<AssetEntity> visible, bool select) {
+    if (_deleting) return;
+    setState(() {
+      final ids = visible.map((asset) => asset.id);
+      if (select) {
+        _selected.addAll(ids);
+      } else {
+        _selected.removeAll(ids);
+      }
+    });
   }
 
   Future<void> _reviewDeletion() async {
@@ -201,7 +304,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         _selected.removeAll(deletedSet);
         _libraryCount = (_libraryCount - deletedSet.length).clamp(0, 1 << 30).toInt();
         _deleting = false;
-        _selecting = _selected.isNotEmpty;
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(deletedSet.isEmpty
@@ -222,8 +324,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     final visible = _visible;
     final width = MediaQuery.sizeOf(context).width;
-    final cols = (width / 145).floor().clamp(3, 8);
+    final isWide = width >= 850;
+    final cols = ((width - (isWide ? 244 : 0)) / 160).floor().clamp(2, 10);
+    final allLoadedSelected = visible.isNotEmpty &&
+        visible.every((item) => _selected.contains(item.id));
     return Scaffold(
+      drawer: isWide ? null : Drawer(child: SafeArea(
+        child: _buildSidebar(context, closeDrawer: true),
+      )),
       appBar: AppBar(
         title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Siftidy', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -248,79 +356,80 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
         ],
       ),
-      body: Column(children: [
+      body: Row(children: [
+        if (isWide) ...[
+          SizedBox(width: 244, child: _buildSidebar(context)),
+          const VerticalDivider(width: 1),
+        ],
+        Expanded(child: Column(children: [
         if (_permission?.isLimited == true)
           const MaterialBanner(
             content: Text('Limited Photos access: only selected assets are visible.'),
             actions: [SizedBox.shrink()],
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Library', style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            Text(_viewName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             )),
             const SizedBox(height: 4),
-            Text('${_assets.length} loaded · $_libraryCount in this view',
+            Text('${_assets.length} loaded · $_libraryCount in this view · 25 per page',
                 style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-              for (final filter in MediaFilter.values) ...[
-                ChoiceChip(
-                  label: Text(filter.label),
-                  selected: _filter == filter,
-                  onSelected: _deleting ? null : (_) {
-                    if (_filter == filter) return;
-                    setState(() => _filter = filter);
+            const SizedBox(height: 9),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                DropdownButton<MediaSort>(
+                  value: _sort,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  items: const [
+                    DropdownMenuItem(value: MediaSort.newest, child: Text('Newest first')),
+                    DropdownMenuItem(value: MediaSort.oldest, child: Text('Oldest first')),
+                  ],
+                  onChanged: _deleting ? null : (value) {
+                    if (value == null || value == _sort) return;
+                    setState(() => _sort = value);
                     _reload();
                   },
                 ),
-                const SizedBox(width: 8),
-              ],
-            ])),
-            const SizedBox(height: 9),
-            Row(children: [
-              DropdownButton<MediaSort>(
-                value: _sort,
-                isDense: true,
-                underline: const SizedBox.shrink(),
-                items: const [
-                  DropdownMenuItem(value: MediaSort.newest, child: Text('Newest first')),
-                  DropdownMenuItem(value: MediaSort.oldest, child: Text('Oldest first')),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Checkbox(
+                    value: allLoadedSelected,
+                    onChanged: _deleting || visible.isEmpty ? null :
+                        (value) => _toggleAllLoaded(visible, value ?? false),
+                  ),
+                  Text('All loaded (${visible.length})'),
+                ]),
+                if (_selected.isNotEmpty) ...[
+                  Text('${_selected.length} selected',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  TextButton.icon(
+                    onPressed: _deleting ? null : () => setState(() => _selected.clear()),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Clear'),
+                  ),
                 ],
-                onChanged: _deleting ? null : (value) {
-                  if (value == null || value == _sort) return;
-                  setState(() => _sort = value);
-                  _reload();
-                },
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: visible.isEmpty ? null : () => setState(() {
-                  _selecting = true;
-                  _selected.addAll(visible.map((asset) => asset.id));
-                }),
-                icon: const Icon(Icons.checklist),
-                label: const Text('Select loaded'),
-              ),
-              if (_selecting)
-                TextButton(
-                  onPressed: () => setState(() {
-                    _selected.clear();
-                    _selecting = false;
-                  }),
-                  child: const Text('Cancel'),
-                ),
-            ]),
+              ],
+            ),
           ]),
         ),
         Expanded(child: _buildContent(visible, cols)),
+      ])),
       ]),
       bottomNavigationBar: _selected.isEmpty ? null : SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: FilledButton.icon(
+          child: Align(
+            heightFactor: 1,
+            alignment: Alignment.centerRight,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: FilledButton.icon(
             onPressed: _deleting ? null : _reviewDeletion,
             icon: _deleting
                 ? const SizedBox(width: 18, height: 18,
@@ -328,7 +437,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 : const Icon(Icons.delete_outline),
             label: Text(_deleting
                 ? 'Waiting for Photos…'
-                : 'Review ${_selected.length} selected'),
+                : 'Delete ${_selected.length} selected…'),
+              ),
+            ),
           ),
         ),
       ),
@@ -362,17 +473,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ]));
     }
     if (visible.isEmpty && !_loadingMore && !_hasMore) {
-      return const Center(child: Text('No matching media found.'));
+      return Center(child: Text(_filter == MediaFilter.screenshots
+          ? 'No screenshots found in Apple Photos.'
+          : 'No matching media found.'));
     }
     return CustomScrollView(
       controller: _scroll,
       slivers: [
-        if (_filter == MediaFilter.favorites)
-          const SliverToBoxAdapter(child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-            child: Text('Favorites filter searches loaded batches; load more for older favorites.',
-                style: TextStyle(fontSize: 12)),
-          )),
+
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           sliver: SliverGrid.builder(
@@ -389,8 +497,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 label: '${asset.type == AssetType.video ? "Video" : "Photo"} '
                     '${selected ? "selected" : "not selected"}',
                 child: InkWell(
-                  onLongPress: () => _toggleAsset(asset),
-                  onTap: () => _selecting ? _toggleAsset(asset) : _showPreview(asset),
+                  onTap: () => _toggleAsset(asset),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: Stack(fit: StackFit.expand, children: [
@@ -412,9 +519,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                       Positioned(
                         top: 5, right: 5,
-                        child: Icon(selected ? Icons.check_circle :
-                            (_selecting ? Icons.circle_outlined : null),
-                            color: Colors.white),
+                        child: Icon(
+                          selected ? Icons.check_circle : Icons.circle_outlined,
+                          color: selected ? const Color(0xFFB9F4F1) : Colors.white,
+                          shadows: const [Shadow(color: Colors.black54, blurRadius: 5)],
+                        ),
                       ),
                       if (asset.type == AssetType.video)
                         const Positioned(bottom: 5, right: 5,

@@ -1,20 +1,24 @@
 import 'package:photo_manager/photo_manager.dart';
 
-enum MediaFilter { all, photos, videos, favorites }
+enum MediaFilter { screenshots, all, photos, videos, favorites, screenRecordings }
 
 enum MediaSort { newest, oldest }
 
 extension MediaFilterDetails on MediaFilter {
   String get label => switch (this) {
-    MediaFilter.all => 'All',
+    MediaFilter.screenshots => 'Screenshots',
+    MediaFilter.all => 'All Media',
     MediaFilter.photos => 'Photos',
     MediaFilter.videos => 'Videos',
     MediaFilter.favorites => 'Favorites',
+    MediaFilter.screenRecordings => 'Screen Recordings',
   };
 
   RequestType get requestType => switch (this) {
+    MediaFilter.screenshots => RequestType.image,
     MediaFilter.photos => RequestType.image,
     MediaFilter.videos => RequestType.video,
+    MediaFilter.screenRecordings => RequestType.video,
     _ => RequestType.common,
   };
 }
@@ -25,8 +29,9 @@ bool isVisible({
   required bool favorite,
 }) => switch (filter) {
   MediaFilter.all => type == AssetType.image || type == AssetType.video,
+  MediaFilter.screenshots => type == AssetType.image,
   MediaFilter.photos => type == AssetType.image,
-  MediaFilter.videos => type == AssetType.video,
+  MediaFilter.videos || MediaFilter.screenRecordings => type == AssetType.video,
   MediaFilter.favorites => favorite &&
       (type == AssetType.image || type == AssetType.video),
 };
