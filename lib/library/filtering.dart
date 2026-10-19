@@ -1,12 +1,13 @@
 import 'package:photo_manager/photo_manager.dart';
 
-enum MediaFilter { screenshots, all, photos, videos, favorites, screenRecordings }
+enum MediaFilter { screenshots, keepers, all, photos, videos, favorites, screenRecordings }
 
 enum MediaSort { newest, oldest }
 
 extension MediaFilterDetails on MediaFilter {
   String get label => switch (this) {
     MediaFilter.screenshots => 'Screenshots',
+    MediaFilter.keepers => 'Keepers',
     MediaFilter.all => 'All Media',
     MediaFilter.photos => 'Photos',
     MediaFilter.videos => 'Videos',
@@ -30,6 +31,7 @@ bool isVisible({
 }) => switch (filter) {
   MediaFilter.all => type == AssetType.image || type == AssetType.video,
   MediaFilter.screenshots => type == AssetType.image,
+  MediaFilter.keepers => type == AssetType.image || type == AssetType.video,
   MediaFilter.photos => type == AssetType.image,
   MediaFilter.videos || MediaFilter.screenRecordings => type == AssetType.video,
   MediaFilter.favorites => favorite &&

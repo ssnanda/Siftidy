@@ -58,6 +58,34 @@ class LibraryRepository {
   Future<List<AssetEntity>> page(AssetPathEntity album, int page, int size) =>
       album.getAssetListPaged(page: page, size: size);
 
+  static const String keeperAlbumName = 'Siftidy Keepers';
+
+  /// PhotoKit album membership: no new image file is duplicated on macOS.
+  static AssetPathEntity? keepersAlbum(List<AssetPathEntity> paths) {
+    for (final path in userAlbums(paths)) {
+      if (path.name == keeperAlbumName) return path;
+    }
+    return null;
+  }
+
+  /// Add existing Photos assets to a persistent Apple Photos album.
+  /// This does not remove screenshots from the system Screenshots smart album.
+  Future<int> addToKeepers(List<AssetEntity> assets) async {
+    if (assets.isEmpty) return 0;
+    final paths = await collections(oldestFirst: false);
+    final keeper = keepersAlbum(paths) ??
+        await PhotoManager.editor.darwin.createAlbum(keeperAlbumName);
+    var added = 0;
+    for (final asset in assets) {
+      final result = await PhotoManager.editor.copyAssetToPath(
+        asset: asset,
+        pathEntity: keeper,
+      );
+      if (result != null) added++;
+    }
+    return added;
+  }
+
   Future<int> count(AssetPathEntity album) => album.assetCountAsync;
 
   /// System handles confirmation and moves deleted items to Recently Deleted.
