@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Prune completed legacy Siftidy Actions runs, and expired temporary artifacts.
+"""Keep only recent Siftidy Actions runs and prune aged temporary artifacts.
 
-Never remove GitHub Releases, release assets, or tags.
+Prune completed old runs immediately, including failed/cancelled runs.
+Never remove running jobs, GitHub Releases, release assets, or tags.
 """
 from datetime import datetime, timedelta, timezone
 import argparse
@@ -34,6 +35,7 @@ def main():
     args = parser.parse_args()
     if args.days < 0 or args.keep < 1:
         parser.error("days >= 0 and keep >= 1 required")
+    # --days applies to temporary artifacts only; run history has no age grace period.
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
     this_run = int(os.environ.get("GITHUB_RUN_ID", "0"))
     runs = list_all("actions/runs", "workflow_runs")
@@ -46,7 +48,7 @@ def main():
         created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
         if run.get("status") != "completed" or run["id"] == this_run:
             continue
-        if name in LEGACY or (name == CURRENT and seen[name] > args.keep and created < cutoff):
+        if name in LEGACY or (name == CURRENT and seen[name] > args.keep):
             api(f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run['id']}", "DELETE")
             deleted += 1
     gone = 0
@@ -55,7 +57,8 @@ def main():
         if artifact.get("expired") or created < cutoff:
             api(f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/artifacts/{artifact['id']}", "DELETE")
             gone += 1
-    print(f"Cleaned {deleted} old completed runs and {gone} temporary artifacts. "
+    print(f"Cleaned {deleted} old completed runs and {gone} temporary artifacts; "
+          f"keeping up to {args.keep} newest workflow runs. "
           "Release assets and tags were kept.")
 
 if __name__ == "__main__":
