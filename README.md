@@ -23,6 +23,16 @@ Siftidy is currently a **macOS-only hobby project**. iOS development and distrib
 
 **Important:** Deleting photos may sync deletions to iCloud Photos and other Apple devices. Photos normally moves them to Recently Deleted. Make backups before using deletion; estimated storage savings are not guaranteed.
 
+## Intelligent Cleanup (v0.2)
+
+Click the sparkles icon in the main toolbar, then **Scan Photos library**. Results
+are grouped into verified exact-byte duplicates, visual lookalikes, possibly blurry
+photos and photos where Apple Vision found no face or human rectangle. The latter
+**does not prove a picture has no person**. Select photos individually to add them
+to Keepers or request deletion through Apple Photos. Scanning never deletes items,
+and existing Keepers are excluded from suggestions. Original-file hashing may
+cause Apple Photos to download iCloud originals; the scan can be stopped.
+
 ## Install and run
 
 [Latest macOS Releases](https://github.com/ssnanda/Siftidy/releases) include one universal macOS ZIP package for Intel and Apple Silicon. They are currently unsigned and unnotarized, so macOS may show a Gatekeeper warning. Do not disable Gatekeeper globally.

@@ -10,6 +10,7 @@ import 'gallery_selection.dart';
 
 import 'filtering.dart';
 import 'library_repository.dart';
+import '../cleanup/cleanup_screen.dart';
 import '../updates/update_button.dart';
 import '../updates/mac_quick_updater.dart';
 
@@ -663,6 +664,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Intelligent cleanup',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: _deleting ? null : () async {
+              await Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => const CleanupScreen(),
+              ));
+              if (mounted) _reload();
+            },
+          ),
           const UpdateButton(),
           IconButton(
             tooltip: 'Refresh library',

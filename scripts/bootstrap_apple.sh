@@ -64,4 +64,6 @@ done
  /usr/libexec/PlistBuddy -c 'Set :com.apple.security.app-sandbox false' \
    macos/Runner/Release.entitlements 2>/dev/null || true
 
+python3 scripts/install_vision_bridge.py
+
 echo 'Ready: flutter run -d macos'
