@@ -14,8 +14,6 @@ on:
         required: true
         default: release
         options: [release, build, validate, cleanup]
-  schedule:
-    - cron: '37 4 * * 0'
 
 permissions:
   contents: read
@@ -41,6 +39,7 @@ jobs:
       - run: dart format lib test
       - run: flutter analyze
       - run: flutter test
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Cleanup workdir
         if: always()
         run: rm -rf .dart_tool build dist artifacts
@@ -114,8 +113,8 @@ jobs:
   cleanup-history:
     name: Cleanup old Actions runs and artifacts
     needs: [validate, build-and-publish]
-    # Always clean up after pushes, even if validation or a macOS release fails.
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.task != 'validate')) }}
+    # Run after successful or failed builds; do not create cleanup-only scheduled runs.
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -127,7 +126,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/delete_legacy_ipas.py
-      - name: Remove old completed workflows and ephemeral artifacts
+      - name: Retain only latest successful build run
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/prune_workflows.py --days 2 --keep 3
+          SIFTIDY_BUILD_PASSED: ${{ needs.validate.result == 'success' && needs.build-and-publish.result == 'success' && (github.event_name == 'push' || inputs.task == 'release') }}
+        run: python3 scripts/prune_workflows.py --artifact-days 2
