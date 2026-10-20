@@ -5,19 +5,17 @@ import 'package:url_launcher/url_launcher.dart';
 import 'update_service.dart';
 import 'mac_quick_updater.dart';
 
-/// State is observed by the modal separately from the page's setState.
-class _InstallUiState {
-  const _InstallUiState({
-    required this.busy,
-    required this.message,
-    this.error,
-  });
-  final bool busy;
-  final String message;
-  final String? error;
+/// A compact toolbar menu rather than modal dialogs or surprise notifications.
+/// Green means up-to-date; red means a newer verified release was found.
+enum _UpdateAction {
+  automatic,
+  check,
+  install,
+  download,
+  releases,
+  privacy,
 }
 
-/// Update checks fetch only public version metadata, never photo content.
 class UpdateButton extends StatefulWidget {
   const UpdateButton({super.key});
 
@@ -33,30 +31,14 @@ class _UpdateButtonState extends State<UpdateButton> {
   bool _automatic = true;
   bool _checking = false;
   bool _installing = false;
-  final ValueNotifier<_InstallUiState> _installUi =
-      ValueNotifier(const _InstallUiState(busy: false, message: ''));
+  String? _installProgress;
+  String? _installError;
   UpdateStatus? _status;
 
   @override
   void initState() {
     super.initState();
     _initialize();
-  }
-
-  @override
-  void dispose() {
-    _installUi.dispose();
-    super.dispose();
-  }
-
-  void _updateInstallUi(bool busy, String message, {String? error}) {
-    if (!mounted) return;
-    _installUi.value = _InstallUiState(
-      busy: busy,
-      message: message,
-      error: error,
-    );
-    setState(() => _installing = busy);
   }
 
   Future<void> _initialize() async {
@@ -66,214 +48,196 @@ class _UpdateButtonState extends State<UpdateButton> {
       setState(() => _automatic = enabled);
       if (enabled) await _check();
     } catch (_) {
-      // Preference failures must never block the Photos library.
+      // Settings must never interfere with browsing the photo library.
     }
   }
 
-  Future<void> _check({bool notify = false}) async {
-    if (_checking) return;
-    setState(() => _checking = true);
-    final status = await _service.check();
-    if (!mounted) return;
+  Future<void> _setAutomatic(bool enabled) async {
+    setState(() => _automatic = enabled);
+    try {
+      await _preferences.setBool(_autoCheckKey, enabled);
+    } catch (_) {
+      // A failed preference write must not block the UI.
+    }
+    if (enabled && _status == null && mounted) await _check();
+  }
+
+  Future<void> _check() async {
+    if (_checking || _installing) return;
     setState(() {
-      _checking = false;
-      _status = status;
+      _checking = true;
+      _installError = null;
     });
-    if (notify || status.hasUpdate) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(status.message),
-          action: status.hasUpdate
-              ? SnackBarAction(label: 'View', onPressed: _openDetails)
-              : null,
-        ),
-      );
+    try {
+      final status = await _service.check();
+      if (!mounted) return;
+      setState(() => _status = status);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _status = const UpdateStatus(
+        state: UpdateState.failed,
+        message: 'Unable to check for updates.',
+        installedVersion: 'unknown',
+      ));
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
   Future<void> _installNow() async {
     final status = _status;
-    if (status == null || _installing) return;
-    _updateInstallUi(true, 'Checking update prerequisites…');
+    if (status == null || !status.hasUpdate || _installing) return;
+    setState(() {
+      _installing = true;
+      _installError = null;
+      _installProgress = 'Checking update prerequisites…';
+    });
     try {
       final error = await const MacQuickUpdater().install(status, (message) {
-        _updateInstallUi(true, message);
+        if (mounted) setState(() => _installProgress = message);
       });
-      // Success exits Siftidy after starting its independent updater.
+      // On successful handoff, the updater exits the app process.
       if (!mounted) return;
-      _updateInstallUi(
-        false,
-        error == null
-            ? 'Update handed off. Siftidy will reopen when ready.'
-            : 'Update failed — the installed app has not been replaced.',
-        error: error,
-      );
+      setState(() {
+        _installError = error;
+        _installProgress = null;
+      });
     } catch (error) {
-      _updateInstallUi(
-        false,
-        'Update failed — the installed app has not been replaced.',
-        error: error.toString(),
-      );
-    }
-  }
-
-  Future<void> _openSecuritySettings() async {
-    final success = await openMacPrivacySecurity();
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Open System Settings → Privacy & Security.')),
-      );
+      if (!mounted) return;
+      setState(() {
+        _installError = error.toString();
+        _installProgress = null;
+      });
+    } finally {
+      if (mounted) setState(() => _installing = false);
     }
   }
 
   Future<void> _openExternal(Uri url) async {
     try {
-      final launched =
-          await launchUrl(url, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open the update link.')),
-        );
+        setState(() => _installError = 'Unable to open link.');
       }
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the update link.')),
-      );
+      if (mounted) setState(() => _installError = 'Unable to open link.');
     }
   }
 
-  void _openDetails() {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, updateDialog) =>
-            ValueListenableBuilder<_InstallUiState>(
-          valueListenable: _installUi,
-          builder: (dialogContext, installUi, _) {
-          final status = _status;
-          const base = 'GitHub Releases';
-          final installed = status?.installedVersion ?? 'not checked';
-          final latest = status?.latestVersion;
-          final canQuickUpdate = status?.hasUpdate == true &&
-              status?.sha256 != null && status?.downloadUrl != null;
-          return AlertDialog(
-            title: const Text('Siftidy updates'),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(status?.message ??
-                      'No update check has been completed yet.'),
-                  const SizedBox(height: 8),
-                  Text(latest == null
-                      ? 'Installed: $installed'
-                      : 'Installed: $installed · Latest: $latest'),
-                  const SizedBox(height: 10),
-                  if (installUi.busy) ...[
-                    const LinearProgressIndicator(),
-                    const SizedBox(height: 8),
-                    Text(installUi.message),
-                    const SizedBox(height: 10),
-                  ],
-                  if (installUi.error != null) ...[
-                    Text(installUi.message,
-                      style: const TextStyle(
-                        color: Color(0xFFA52835),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    SelectableText(installUi.error!,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (status?.hasUpdate == true)
-                    const Text('Update & Restart replaces the copy of Siftidy '
-                        'in Applications. The older app is kept until the '
-                        'replacement is ready.'),
-                  const SizedBox(height: 14),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Check automatically on launch'),
-                    subtitle: Text(
-                      'Fetches public update metadata from $base only. '
-                      'No photos or analytics are uploaded.',
-                    ),
-                    value: _automatic,
-                    onChanged: (value) {
-                      setState(() => _automatic = value);
-                      updateDialog(() {});
-                      _preferences.setBool(_autoCheckKey, value);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: _openSecuritySettings,
-                child: const Text('Privacy & Security'),
-              ),
-              TextButton(
-                onPressed: installUi.busy ? null : () {
-                  Navigator.pop(dialogContext);
-                  _check(notify: true);
-                },
-                child: const Text('Check Now'),
-              ),
-              if (status?.downloadUrl != null)
-                TextButton(
-                  onPressed: () => _openExternal(status!.downloadUrl!),
-                  child: const Text('Download ZIP'),
-                ),
-              if (canQuickUpdate)
-                FilledButton.icon(
-                  onPressed: installUi.busy ? null : _installNow,
-                  icon: const Icon(Icons.system_update_alt),
-                  label: const Text('Update & Restart'),
-                )
-              else
-                TextButton(
-                  onPressed: () => _openExternal(Uri.parse(gitHubReleasesUrl)),
-                  child: const Text('GitHub Releases'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Close'),
-              ),
-            ],
-          );
-          },
-        ),
-      ),
-    );
+  void _choose(_UpdateAction action) {
+    switch (action) {
+      case _UpdateAction.automatic:
+        _setAutomatic(!_automatic);
+      case _UpdateAction.check:
+        _check();
+      case _UpdateAction.install:
+        _installNow();
+      case _UpdateAction.download:
+        final url = _status?.downloadUrl;
+        if (url != null) _openExternal(url);
+      case _UpdateAction.releases:
+        _openExternal(Uri.parse(gitHubReleasesUrl));
+      case _UpdateAction.privacy:
+        openMacPrivacySecurity();
+    }
   }
 
   @override
-  Widget build(BuildContext context) => IconButton(
-        tooltip: _installing ? _installUi.value.message : _checking
-            ? 'Checking for updates'
-            : _status?.hasUpdate == true
-                ? 'New Siftidy update available'
-                : 'Siftidy updates',
-        onPressed: _installing ? null : _openDetails,
-        icon: _checking || _installing
-            ? const SizedBox(
-                width: 19,
-                height: 19,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(
-                _status?.hasUpdate == true
-                    ? Icons.new_releases_outlined
-                    : Icons.system_update_outlined,
-                color: _status?.hasUpdate == true
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
+  Widget build(BuildContext context) {
+    final hasUpdate = _status?.hasUpdate == true;
+    final statusColor = hasUpdate
+        ? const Color(0xFFCA2934)
+        : _status?.state == UpdateState.current
+            ? const Color(0xFF168344)
+            : const Color(0xFF66787D);
+    final statusLabel = _installError != null
+        ? 'Update error: $_installError'
+        : _installProgress ??
+            _status?.message ??
+            (_checking ? 'Checking for updates…' : 'Not checked yet');
+    final canInstall = hasUpdate && _status?.downloadUrl != null &&
+        _status?.sha256 != null && !_installing;
+
+    return PopupMenuButton<_UpdateAction>(
+      tooltip: hasUpdate ? 'Siftidy update available' : 'Siftidy updates',
+      offset: const Offset(0, 42),
+      position: PopupMenuPosition.under,
+      onSelected: _choose,
+      icon: _checking || _installing
+          ? SizedBox(
+              width: 19,
+              height: 19,
+              child: CircularProgressIndicator(strokeWidth: 2,
+                  color: statusColor),
+            )
+          : Icon(
+              Icons.system_update_outlined,
+              color: statusColor,
+              size: 25,
+            ),
+      itemBuilder: (context) => [
+        PopupMenuItem<_UpdateAction>(
+          enabled: false,
+          child: SizedBox(
+            width: 290,
+            child: Text(statusLabel,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: _installError == null ? null : const Color(0xFFCA2934),
               ),
-      );
+            ),
+          ),
+        ),
+        PopupMenuItem<_UpdateAction>(
+          value: _UpdateAction.automatic,
+          enabled: !_installing,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IgnorePointer(
+                child: Checkbox(
+                  value: _automatic,
+                  onChanged: (_) {},
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const Expanded(child: Text('Check automatically on launch')),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<_UpdateAction>(
+          value: _UpdateAction.check,
+          enabled: !_checking && !_installing,
+          child: const Text('Check now'),
+        ),
+        if (hasUpdate)
+          PopupMenuItem<_UpdateAction>(
+            value: _UpdateAction.install,
+            enabled: canInstall,
+            child: const Row(children: [
+              Icon(Icons.system_update_alt, size: 20),
+              SizedBox(width: 10),
+              Text('Update & Restart'),
+            ]),
+          ),
+        if (_status?.downloadUrl != null)
+          const PopupMenuItem<_UpdateAction>(
+            value: _UpdateAction.download,
+            child: Text('Download ZIP'),
+          ),
+        const PopupMenuItem<_UpdateAction>(
+          value: _UpdateAction.releases,
+          child: Text('GitHub Releases'),
+        ),
+        const PopupMenuItem<_UpdateAction>(
+          value: _UpdateAction.privacy,
+          child: Text('Privacy & Security'),
+        ),
+      ],
+    );
+  }
 }

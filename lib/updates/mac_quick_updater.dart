@@ -151,7 +151,7 @@ class MacQuickUpdater {
       }
       progress('Installing and restarting…');
       final script = File(temp.path + '/install.sh');
-      await script.writeAsString(_helperScript);
+      await script.writeAsString(helperScript);
       final logs = Directory(home + '/Library/Logs/Siftidy');
       await logs.create(recursive: true);
       await Process.start('/bin/sh', [
@@ -187,7 +187,9 @@ class MacQuickUpdater {
     return result.exitCode == 0 ? result.stdout.toString().trim() : '';
   }
 
-  static const String _helperScript = r'''#!/bin/sh
+  /// The detached helper is deliberately plain POSIX shell, so it continues
+  /// after the Flutter process terminates and can reopen the updated app.
+  static const String helperScript = r'''#!/bin/sh
 set -eu
 TARGET="$1"
 SOURCE="$2"
@@ -216,23 +218,45 @@ if ! /bin/mv "$TARGET" "$BACKUP"; then
   echo "Cannot replace app; original preserved."
   exit 1
 fi
-if /bin/mv "$NEW" "$TARGET"; then
-  echo "Replaced Siftidy. Launching the updated app."
-  if /usr/bin/open "$TARGET"; then
-    echo "Launch requested successfully."
-    /bin/rm -rf "$BACKUP"
-    /bin/rm -rf "$WORK"
-  else
-    echo "Launch failed; attempting to restore original app."
-    /bin/mv "$TARGET" "$NEW" || true
-    /bin/mv "$BACKUP" "$TARGET" || true
-    /usr/bin/open "$TARGET" || true
-  fi
-else
+if ! /bin/mv "$NEW" "$TARGET"; then
   /bin/mv "$BACKUP" "$TARGET" || true
   echo "Replacement failed; restored original."
-  /usr/bin/open "$TARGET" || true
+  /usr/bin/open -n -a "$TARGET" || true
+  exit 1
 fi
+
+# A successful 'open' exit status does not prove Gatekeeper allowed launch.
+# -n avoids LaunchServices reusing the just-terminated, old app instance.
+echo "Replaced Siftidy. Requesting a fresh launch."
+if ! /usr/bin/open -n -a "$TARGET"; then
+  echo "LaunchServices declined the launch request."
+fi
+
+# Verify there is a running executable rather than trusting 'open' alone.
+# CFBundleExecutable is more reliable than assuming a fixed binary name.
+EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$TARGET/Contents/Info.plist" 2>/dev/null || true)
+i=0
+while [ "$i" -lt 24 ]; do
+  if /usr/bin/pgrep -f "$TARGET/Contents/MacOS/" >/dev/null 2>&1 ||
+     { [ -n "$EXECUTABLE" ] && /usr/bin/pgrep -x "$EXECUTABLE" >/dev/null 2>&1; }; then
+    echo "Confirmed Siftidy restarted."
+    /bin/rm -rf "$BACKUP"
+    /bin/rm -rf "$WORK"
+    exit 0
+  fi
+  sleep 0.5
+  i=$((i + 1))
+done
+
+# Keep the updated app installed so the user approves THAT version.
+# An approval may be necessary, but only macOS can authorize it.
+echo "Relaunch could not be confirmed. Opening Privacy & Security."
+if ! /usr/bin/open 'x-apple.systempreferences:com.apple.preference.security'; then
+  /usr/bin/open -a 'System Settings' || true
+fi
+# Preserve the previous app as a rollback until a future successful install.
+/bin/rm -rf "$WORK"
+exit 0
 ''';
 }
 

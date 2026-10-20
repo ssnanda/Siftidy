@@ -67,6 +67,16 @@ void main() {
     }
   });
 
+  test('detached macOS updater forces fresh launch and detects blocked launch', () {
+    const script = MacQuickUpdater.helperScript;
+    expect(script, contains('/usr/bin/open -n -a "\$TARGET"'));
+    expect(script, contains('/usr/bin/pgrep -f'));
+    expect(script, contains('CFBundleExecutable'));
+    expect(script, contains('x-apple.systempreferences:com.apple.preference.security'));
+    expect(script, contains('Relaunch could not be confirmed'));
+    expect(script, isNot(contains('spctl --master-disable')));
+  });
+
   test('quick updater only targets Applications app bundles', () {
     expect(MacQuickUpdater.isAllowedInstallPath(
       '/Applications/siftidy.app', '/Users/example'), isTrue);
