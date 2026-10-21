@@ -417,6 +417,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         _focusedIndex = -1;
         _deleting = false;
       });
+      _cleanup.exclude(keptIds);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved $saved item(s) to Siftidy Keepers.')),
       );
@@ -669,6 +670,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           _hasMore = _assets.length < _libraryCount;
         });
 
+        _cleanup.exclude(deletedIds);
         if (selectNext && mounted) {
           var nextIndex =
               nextIndexAfterDeletion(beforeIds, deletedIds, originalIndex);

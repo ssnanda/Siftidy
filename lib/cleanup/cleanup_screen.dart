@@ -110,6 +110,12 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
 
   Future<bool> _deleteIds(Set<String> ids) async {
     if (_busy || ids.isEmpty) return false;
+    final currentIds = _visible.map((item) => item.id).toSet();
+    if (!currentIds.containsAll(ids)) {
+      _notice('Some selected photos are no longer in this scan. Select again.');
+      setState(() => _selected.removeAll(ids));
+      return false;
+    }
     if (!_safeToDelete(ids)) {
       _notice('Select at least one photo to keep in each duplicate group.');
       return false;
