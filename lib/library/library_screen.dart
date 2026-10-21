@@ -11,6 +11,7 @@ import 'gallery_selection.dart';
 import 'filtering.dart';
 import 'library_repository.dart';
 import '../cleanup/cleanup_screen.dart';
+import '../cleanup/cleanup_controller.dart';
 import '../updates/update_button.dart';
 import '../updates/mac_quick_updater.dart';
 
@@ -24,6 +25,22 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   static const int _pageSize = 25;
   final LibraryRepository _repository = LibraryRepository();
+  final CleanupController _cleanup = CleanupController();
+  CleanupCategory? _cleanupCategory;
+
+  void _onCleanupChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _chooseCleanup(CleanupCategory category, {bool closeDrawer = false}) {
+    if (_deleting) return;
+    setState(() {
+      _cleanupCategory = category;
+      _selected.clear();
+      _focusedIndex = -1;
+    });
+    if (closeDrawer) Navigator.pop(context);
+  }
   final ScrollController _scroll = ScrollController();
   final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
   int _focusedIndex = -1;
@@ -55,12 +72,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    _cleanup.addListener(_onCleanupChanged);
     _reload(requestPermission: true);
   }
 
   @override
   void dispose() {
     _generation++;
+    _cleanup.removeListener(_onCleanupChanged);
+    _cleanup.dispose();
     _gridFocus.dispose();
     for (final value in _selectedSignals.values) { value.dispose(); }
     for (final value in _focusedSignals.values) { value.dispose(); }
@@ -173,6 +193,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         _loading = false;
       });
       await _fetchNext(generation);
+      if (mounted && generation == _generation) {
+        // Start a progressive scan quietly; browsing remains available.
+        _cleanup.startIfEnabled(_keeperIds);
+      }
     } catch (error) {
       if (!mounted || generation != _generation) return;
       setState(() {
@@ -235,10 +259,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _chooseView(MediaFilter filter, {String? albumId, bool closeDrawer = false}) {
-    if (_deleting || (_filter == filter && _albumId == albumId)) return;
+    if (_deleting || (_cleanupCategory == null && _filter == filter && _albumId == albumId)) return;
     setState(() {
       _filter = filter;
       _albumId = albumId;
+      _cleanupCategory = null;
     });
     if (closeDrawer) Navigator.pop(context);
     _reload();
@@ -252,7 +277,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     String? albumId,
     bool closeDrawer = false,
   }) {
-    final selected = _filter == filter && _albumId == albumId;
+    final selected = _cleanupCategory == null && _filter == filter && _albumId == albumId;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: ListTile(
@@ -265,6 +290,34 @@ class _LibraryScreenState extends State<LibraryScreen> {
         onTap: _deleting ? null : () => _chooseView(
           filter, albumId: albumId, closeDrawer: closeDrawer,
         ),
+      ),
+    );
+  }
+
+  Widget _cleanupTile(BuildContext context, CleanupCategory category,
+      {bool closeDrawer = false, String? title, bool indent = false}) {
+    final count = switch (category) {
+      CleanupCategory.exact => _cleanup.exactCount,
+      CleanupCategory.similar => _cleanup.similarCount,
+      CleanupCategory.blurry => _cleanup.blurry.length,
+      CleanupCategory.noPeople => _cleanup.noPeople.length,
+    };
+    return Padding(
+      padding: EdgeInsets.fromLTRB(indent ? 22 : 8, 2, 8, 2),
+      child: ListTile(
+        dense: true,
+        selected: _cleanupCategory == category,
+        selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        leading: Icon(category.icon, size: 20),
+        title: Text(title ?? category.label, maxLines: 1,
+          overflow: TextOverflow.ellipsis),
+        trailing: count > 0 ? Text('$count',
+            style: const TextStyle(fontWeight: FontWeight.bold)) :
+          (_cleanup.running ? const SizedBox(width: 12, height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2)) : null),
+        onTap: _deleting ? null :
+          () => _chooseCleanup(category, closeDrawer: closeDrawer),
       ),
     );
   }
@@ -282,6 +335,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         Expanded(child: ListView(children: [
           _sidebarTile(context, Icons.screenshot_monitor_outlined,
             'Screenshots', MediaFilter.screenshots, closeDrawer: closeDrawer),
+          _cleanupTile(context, CleanupCategory.exact,
+            title: 'Duplicates', indent: true, closeDrawer: closeDrawer),
           _sidebarTile(context, Icons.bookmark_rounded,
             'Keepers', MediaFilter.keepers, closeDrawer: closeDrawer),
           _sidebarTile(context, Icons.photo_library_outlined,
@@ -296,6 +351,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
             _sidebarTile(context, Icons.videocam_outlined,
               'Screen Recordings', MediaFilter.screenRecordings,
               closeDrawer: closeDrawer),
+          const Divider(height: 28, indent: 12, endIndent: 12),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
+            child: Text('INTELLIGENT CLEANUP', style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
+            )),
+          ),
+          for (final category in CleanupCategory.values)
+            _cleanupTile(context, category, closeDrawer: closeDrawer),
           const Divider(height: 28, indent: 12, endIndent: 12),
           const Padding(
             padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
@@ -664,15 +728,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Intelligent cleanup',
-            icon: const Icon(Icons.auto_awesome_outlined),
-            onPressed: _deleting ? null : () async {
-              await Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => const CleanupScreen(),
-              ));
-              if (mounted) _reload();
-            },
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+            child: OutlinedButton.icon(
+              onPressed: _deleting ? null :
+                  () => _chooseCleanup(CleanupCategory.exact),
+              icon: _cleanup.running
+                  ? const SizedBox(width: 17, height: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.auto_awesome_outlined, size: 19),
+              label: Text(_cleanup.running
+                  ? 'Scan ${(_cleanup.fraction * 100).round()}% · ${_cleanup.exactCount} duplicates'
+                  : _cleanup.completed
+                      ? '${_cleanup.exactCount} duplicates'
+                      : 'Intelligent Cleanup'),
+            ),
           ),
           const UpdateButton(),
           IconButton(
@@ -696,7 +766,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           SizedBox(width: 244, child: _buildSidebar(context)),
           const VerticalDivider(width: 1),
         ],
-        Expanded(child: Column(children: [
+        Expanded(child: _cleanupCategory != null
+            ? CleanupWorkspace(
+                controller: _cleanup,
+                category: _cleanupCategory!,
+                onLibraryChanged: () => _reload(),
+              )
+            : Column(children: [
         if (_permission?.isLimited == true)
           const MaterialBanner(
             content: Text('Limited Photos access: only selected assets are visible.'),
@@ -765,7 +841,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         )),
       ])),
       ]),
-      bottomNavigationBar: _selected.isEmpty ? null : SafeArea(
+      bottomNavigationBar: _cleanupCategory != null || _selected.isEmpty ? null : SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
