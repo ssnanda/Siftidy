@@ -117,7 +117,9 @@ bool visuallySimilar(PhotoFingerprint a, PhotoFingerprint b, {
 /// grouping two different receipts, messages, documents or app screens.
 bool matchingScreenshotLayout(PhotoFingerprint a, PhotoFingerprint b) {
   if (a.spatialLuma.length != 24 * 24 ||
-      b.spatialLuma.length != 24 * 24) return false;
+      b.spatialLuma.length != 24 * 24) {
+    return false;
+  }
   var difference = 0;
   var changed = 0;
   var contrasting = 0;
@@ -126,9 +128,13 @@ bool matchingScreenshotLayout(PhotoFingerprint a, PhotoFingerprint b) {
     final second = b.spatialLuma[i];
     final delta = (first - second).abs();
     difference += delta;
-    if (delta > 20) changed++;
+    if (delta > 20) {
+      changed++;
+    }
     if ((first > 230 && second < 200) ||
-        (second > 230 && first < 200)) contrasting++;
+        (second > 230 && first < 200)) {
+      contrasting++;
+    }
   }
   for (var channel = 0; channel < 3; channel++) {
     if ((a.averageRgb[channel] - b.averageRgb[channel]).abs() > 14) {
