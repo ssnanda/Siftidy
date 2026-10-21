@@ -496,7 +496,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : (_selected.add(current.id) || _selected.contains(current.id));
       _selectedSignal(current.id).value = selected;
     });
-    if (selected) {
+    if (_selected.contains(current.id)) {
       _sizes.inspect([current]);
     }
     if (previous >= 0 && previous != index && previous < items.length) {
