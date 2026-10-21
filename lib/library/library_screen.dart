@@ -39,7 +39,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _selected.clear();
       _focusedIndex = -1;
     });
-    if (closeDrawer) Navigator.pop(context);
+    if (closeDrawer) {
+      Navigator.pop(context);
+    }
   }
   final ScrollController _scroll = ScrollController();
   final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
@@ -90,7 +92,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   void _onScroll() {
     if (!_scroll.hasClients || _loading || _loadingMore || !_hasMore) return;
-    if (_scroll.position.extentAfter < 700) _fetchNext(_generation);
+    if (_scroll.position.extentAfter < 700) {
+      _fetchNext(_generation);
+    }
   }
 
   Future<void> _reload({bool requestPermission = false}) async {
@@ -265,7 +269,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _albumId = albumId;
       _cleanupCategory = null;
     });
-    if (closeDrawer) Navigator.pop(context);
+    if (closeDrawer) {
+      Navigator.pop(context);
+    }
     _reload();
   }
 
@@ -518,7 +524,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
         keep: (asset) => _keepAssets([asset]),
       ),
     ).whenComplete(() {
-      if (mounted) _gridFocus.requestFocus();
+      if (mounted) {
+        _gridFocus.requestFocus();
+      }
     });
   }
 
@@ -542,7 +550,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     if (key == LogicalKeyboardKey.delete ||
         key == LogicalKeyboardKey.backspace) {
-      if (_selected.isNotEmpty) _deleteSelected();
+      if (_selected.isNotEmpty) {
+        _deleteSelected();
+      }
       return KeyEventResult.handled;
     }
     final cols = galleryColumnCount(MediaQuery.sizeOf(context).width);
