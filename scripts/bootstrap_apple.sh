@@ -65,5 +65,6 @@ done
    macos/Runner/Release.entitlements 2>/dev/null || true
 
 python3 scripts/install_vision_bridge.py
+python3 scripts/configure_macos_window.py
 
 echo 'Ready: flutter run -d macos'

@@ -10,7 +10,7 @@ Siftidy is currently a **macOS-only hobby project**. iOS development and distrib
 
 - Starts with the native Apple Photos **Screenshots** smart album.
 - Left sidebar with Screenshots, All Media, Photos, Videos, Favorites, Screen Recordings (if available), and existing user-created Photos albums.
-- Load **25 images per page**, with automatic progressive loading as you scroll or explicit Load More.
+- Load **50 images per page**, with automatic progressive loading as you scroll or explicit Load More.
 - **Single-click to select/deselect** and build multi-selection; grid clicks do not open a photo preview.
 - **All loaded** checkbox applies to currently loaded items in the current view, not the entire Photos library.
 - **Double-click** opens preview. In the grid, **Arrow keys** select and move focus, **Space** toggles selection, **Enter** opens preview, and **Delete** deletes selected items. In preview, **arrows** navigate and select without deselecting, **Space** toggles only the current photo, and **Enter** closes preview.
@@ -32,6 +32,8 @@ photos and photos where Apple Vision found no face or human rectangle. The latte
 to Keepers or request deletion through Apple Photos. Scanning never deletes items,
 and existing Keepers are excluded from suggestions. Original-file hashing may
 cause Apple Photos to download iCloud originals; the scan can be stopped.
+
+The macOS gallery opens in a larger, screen-aware window (up to 1450 × 950 points) and remembers subsequent user resizing.
 
 ## Install and run
 

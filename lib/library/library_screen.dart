@@ -23,7 +23,7 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  static const int _pageSize = 25;
+  static const int _pageSize = 50;
   final LibraryRepository _repository = LibraryRepository();
   final CleanupController _cleanup = CleanupController();
   CleanupCategory? _cleanupCategory;
@@ -806,7 +806,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               Text('Loaded: ${_visible.length} of $_libraryCount',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
                   color: Color(0xFF27383D))),
-              const Text('25 at a time',
+              const Text('50 at a time',
                 style: TextStyle(fontSize: 13, color: Color(0xFF27383D))),
             ]),
             const SizedBox(height: 9),
