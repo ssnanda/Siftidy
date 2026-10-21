@@ -263,7 +263,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _chooseView(MediaFilter filter, {String? albumId, bool closeDrawer = false}) {
-    if (_deleting || (_cleanupCategory == null && _filter == filter && _albumId == albumId)) return;
+    if (_deleting ||
+        (_cleanupCategory == null && _filter == filter && _albumId == albumId)) {
+      return;
+    }
     setState(() {
       _filter = filter;
       _albumId = albumId;
@@ -766,7 +769,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
               icon: const Icon(Icons.add_photo_alternate_outlined),
               onPressed: () async {
                 await PhotoManager.presentLimited();
-                if (mounted) await _reload(requestPermission: true);
+                if (mounted) {
+                  await _reload(requestPermission: true);
+                }
               },
             ),
         ],
@@ -817,7 +822,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     DropdownMenuItem(value: MediaSort.oldest, child: Text('Oldest first')),
                   ],
                   onChanged: _deleting ? null : (value) {
-                    if (value == null || value == _sort) return;
+                    if (value == null || value == _sort) {
+                      return;
+                    }
                     setState(() => _sort = value);
                     _reload();
                   },
@@ -904,7 +911,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Widget _buildContent(List<AssetEntity> visible, int cols) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (_permission?.hasAccess != true) {
       return Center(child: Padding(
         padding: const EdgeInsets.all(24),
