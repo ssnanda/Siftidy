@@ -1,5 +1,7 @@
 import 'package:photo_manager/photo_manager.dart';
 
+import '../cleanup/deletion_stats.dart';
+
 /// PhotoKit-backed repository, kept separate from Flutter widgets for v0.2.
 class LibraryRepository {
   Future<PermissionState> requestAccess() => PhotoManager.requestPermissionExtend();
@@ -106,6 +108,17 @@ class LibraryRepository {
   Future<int> count(AssetPathEntity album) => album.assetCountAsync;
 
   /// System handles confirmation and moves deleted items to Recently Deleted.
-  Future<List<String>> delete(List<String> ids) =>
-      PhotoManager.editor.deleteWithIds(ids);
+  Future<List<String>> delete(List<String> ids, {
+    Map<String, int> knownSizes = const {},
+  }) async {
+    final removed = await PhotoManager.editor.deleteWithIds(ids);
+    if (removed.isNotEmpty) {
+      try {
+        await DeletionStats.instance.record(removed, knownSizes);
+      } catch (_) {
+        // Deletion already succeeded; statistics must not misreport failure.
+      }
+    }
+    return removed;
+  }
 }
