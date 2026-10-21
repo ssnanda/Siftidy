@@ -12,6 +12,8 @@ import 'filtering.dart';
 import 'library_repository.dart';
 import '../cleanup/cleanup_screen.dart';
 import '../cleanup/cleanup_controller.dart';
+import '../cleanup/media_sizes.dart';
+import '../cleanup/deletion_stats.dart';
 import '../updates/update_button.dart';
 import '../updates/mac_quick_updater.dart';
 
@@ -25,6 +27,9 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   static const int _pageSize = 50;
   final LibraryRepository _repository = LibraryRepository();
+  final MediaSizes _sizes = MediaSizes.instance;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _activityView = false;
   final CleanupController _cleanup = CleanupController();
   CleanupCategory? _cleanupCategory;
 
@@ -36,6 +41,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_deleting) return;
     setState(() {
       _cleanupCategory = category;
+      _activityView = false;
       _selected.clear();
       _focusedIndex = -1;
     });
@@ -75,6 +81,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     _scroll.addListener(_onScroll);
     _cleanup.addListener(_onCleanupChanged);
+    _sizes.addListener(_onCleanupChanged);
+    DeletionStats.instance.load();
     _reload(requestPermission: true);
   }
 
@@ -82,6 +90,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void dispose() {
     _generation++;
     _cleanup.removeListener(_onCleanupChanged);
+    _sizes.removeListener(_onCleanupChanged);
     _cleanup.dispose();
     _gridFocus.dispose();
     for (final value in _selectedSignals.values) { value.dispose(); }
@@ -271,6 +280,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _filter = filter;
       _albumId = albumId;
       _cleanupCategory = null;
+      _activityView = false;
     });
     if (closeDrawer) {
       Navigator.pop(context);
@@ -286,7 +296,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     String? albumId,
     bool closeDrawer = false,
   }) {
-    final selected = _cleanupCategory == null && _filter == filter && _albumId == albumId;
+    final selected = !_activityView && _cleanupCategory == null && _filter == filter && _albumId == albumId;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: ListTile(
@@ -331,70 +341,88 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  void _chooseActivity({bool closeDrawer = false}) {
+    if (_deleting) return;
+    setState(() {
+      _cleanupCategory = null;
+      _activityView = true;
+      _selected.clear();
+    });
+    if (closeDrawer) {
+      Navigator.pop(context);
+    }
+  }
+
   Widget _buildSidebar(BuildContext context, {bool closeDrawer = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
-          child: Text('BROWSE', style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
+        child: Text('APPLE PHOTOS', style: TextStyle(
+          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
+        )),
+      ),
+      Expanded(child: ListView(children: [
+        _sidebarTile(context, Icons.screenshot_monitor_outlined,
+          'Screenshots', MediaFilter.screenshots, closeDrawer: closeDrawer),
+        _sidebarTile(context, Icons.photo_library_outlined,
+          'All Media', MediaFilter.all, closeDrawer: closeDrawer),
+        _sidebarTile(context, Icons.photo_outlined,
+          'Photos', MediaFilter.photos, closeDrawer: closeDrawer),
+        _sidebarTile(context, Icons.movie_outlined,
+          'Videos', MediaFilter.videos, closeDrawer: closeDrawer),
+        _sidebarTile(context, Icons.favorite_outline,
+          'Favorites', MediaFilter.favorites, closeDrawer: closeDrawer),
+        if (_showRecordings)
+          _sidebarTile(context, Icons.videocam_outlined,
+            'Screen Recordings', MediaFilter.screenRecordings,
+            closeDrawer: closeDrawer),
+        const Divider(height: 26, indent: 12, endIndent: 12),
+        const Padding(padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
+          child: Text('ALBUMS', style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
           )),
         ),
-        Expanded(child: ListView(children: [
-          _sidebarTile(context, Icons.screenshot_monitor_outlined,
-            'Screenshots', MediaFilter.screenshots, closeDrawer: closeDrawer),
-          _cleanupTile(context, CleanupCategory.exact,
-            title: 'Duplicates', indent: true, closeDrawer: closeDrawer),
-          _sidebarTile(context, Icons.bookmark_rounded,
-            'Keepers', MediaFilter.keepers, closeDrawer: closeDrawer),
-          _sidebarTile(context, Icons.photo_library_outlined,
-            'All Media', MediaFilter.all, closeDrawer: closeDrawer),
-          _sidebarTile(context, Icons.photo_outlined,
-            'Photos', MediaFilter.photos, closeDrawer: closeDrawer),
-          _sidebarTile(context, Icons.movie_outlined,
-            'Videos', MediaFilter.videos, closeDrawer: closeDrawer),
-          _sidebarTile(context, Icons.favorite_outline,
-            'Favorites', MediaFilter.favorites, closeDrawer: closeDrawer),
-          if (_showRecordings)
-            _sidebarTile(context, Icons.videocam_outlined,
-              'Screen Recordings', MediaFilter.screenRecordings,
-              closeDrawer: closeDrawer),
-          const Divider(height: 28, indent: 12, endIndent: 12),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
-            child: Text('INTELLIGENT CLEANUP', style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
-            )),
-          ),
-          for (final category in CleanupCategory.values)
-            _cleanupTile(context, category, closeDrawer: closeDrawer),
-          const Divider(height: 28, indent: 12, endIndent: 12),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
-            child: Text('APPLE PHOTOS ALBUMS', style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
-            )),
-          ),
-          if (_userAlbums.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              child: Text('No albums found', style: TextStyle(fontSize: 12)),
-            ),
-          for (final album in _userAlbums)
-            if (album.name != LibraryRepository.keeperAlbumName)
+        _sidebarTile(context, Icons.bookmark_rounded,
+          'Siftidy Keepers', MediaFilter.keepers, closeDrawer: closeDrawer),
+        for (final album in _userAlbums)
+          if (album.name != LibraryRepository.keeperAlbumName)
             _sidebarTile(context, Icons.folder_outlined, album.name,
               MediaFilter.all, albumId: album.id, closeDrawer: closeDrawer),
-        ])),
-        const Padding(
-          padding: EdgeInsets.all(14),
-          child: Text(
-            'Browse existing Photos albums. Selection never changes an album.',
-            style: TextStyle(fontSize: 11),
+        if (_userAlbums.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            child: Text('No other albums', style: TextStyle(fontSize: 12))),
+      ])),
+    ]);
+  }
+
+  Widget _buildCleanupSidebar(BuildContext context,
+      {bool closeDrawer = false}) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(padding: EdgeInsets.fromLTRB(16, 18, 12, 12),
+        child: Text('SIFTIDY TOOLS', style: TextStyle(
+          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
+        )),
+      ),
+      Expanded(child: ListView(children: [
+        for (final category in CleanupCategory.values)
+          _cleanupTile(context, category, closeDrawer: closeDrawer),
+        const Divider(height: 24, indent: 10, endIndent: 10),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: ListTile(
+            dense: true,
+            selected: _activityView,
+            selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+            leading: const Icon(Icons.analytics_outlined),
+            title: const Text('Deletion activity'),
+            subtitle: const Text('Count · size · Photos'),
+            onTap: () => _chooseActivity(closeDrawer: closeDrawer),
           ),
         ),
-      ],
-    );
+        const Padding(padding: EdgeInsets.fromLTRB(15, 10, 10, 8),
+          child: Text('Recently Deleted is managed by Apple Photos.',
+            style: TextStyle(fontSize: 11)),
+        ),
+      ])),
+    ]);
   }
 
   Future<bool> _keepAssets(List<AssetEntity> chosen) async {
@@ -451,6 +479,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final selected = togglePhotoMembership(_selected, asset.id);
       _selectedSignal(asset.id).value = selected;
     });
+    if (_selected.contains(asset.id)) {
+      _sizes.inspect([asset]);
+    }
   }
 
   /// A click changes selection. Keyboard/preview navigation only adds selection.
@@ -465,6 +496,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : (_selected.add(current.id) || _selected.contains(current.id));
       _selectedSignal(current.id).value = selected;
     });
+    if (selected) {
+      _sizes.inspect([current]);
+    }
     if (previous >= 0 && previous != index && previous < items.length) {
       _focusedSignal(items[previous].id).value = false;
     }
@@ -496,6 +530,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
         _selectedSignal(asset.id).value = select;
       }
     });
+    if (select) {
+      _sizes.inspect(visible);
+    }
   }
 
   void _showPreview(AssetEntity asset) {
@@ -642,9 +679,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() => _deleting = true);
     try {
       // Apple Photos may ask for its own confirmation. Siftidy adds none.
-      final response = await _repository.delete(
-        chosen.map((item) => item.id).toList(growable: false),
-      );
+      final ids = chosen.map((item) => item.id).toList(growable: false);
+      final response = await _repository.delete(ids,
+        knownSizes: _sizes.knownFor(ids));
       if (!mounted) return <String>{};
       final requestedIds = chosen.map((item) => item.id).toSet();
       final deletedIds = response.where(requestedIds.contains).toSet();
@@ -721,13 +758,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     final visible = _visible;
     final width = MediaQuery.sizeOf(context).width;
-    final isWide = width >= 850;
-    final cols = galleryColumnCount(width);
+    final isWide = width >= 960;
+    final galleryWidth = width - (isWide ? 470 : 0);
+    final cols = galleryColumnCount(galleryWidth);
     final allLoadedSelected = visible.isNotEmpty &&
         visible.every((item) => _selected.contains(item.id));
     return Scaffold(
+      key: _scaffoldKey,
       drawer: isWide ? null : Drawer(child: SafeArea(
         child: _buildSidebar(context, closeDrawer: true),
+      )),
+      endDrawer: isWide ? null : Drawer(child: SafeArea(
+        child: _buildCleanupSidebar(context, closeDrawer: true),
       )),
       appBar: AppBar(
         title: const Row(
@@ -759,6 +801,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       : 'Intelligent Cleanup'),
             ),
           ),
+          if (!isWide)
+            IconButton(tooltip: 'Siftidy tools (right menu)',
+              icon: const Icon(Icons.view_sidebar_outlined),
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
           const UpdateButton(),
           IconButton(
             tooltip: 'Refresh library',
@@ -780,10 +826,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ),
       body: Row(children: [
         if (isWide) ...[
-          SizedBox(width: 244, child: _buildSidebar(context)),
+          SizedBox(width: 230, child: _buildSidebar(context)),
           const VerticalDivider(width: 1),
         ],
-        Expanded(child: _cleanupCategory != null
+        Expanded(child: _activityView
+            ? const DeletionActivityView()
+            : _cleanupCategory != null
             ? CleanupWorkspace(
                 controller: _cleanup,
                 category: _cleanupCategory!,
@@ -859,8 +907,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: _buildContent(visible, cols),
         )),
       ])),
+        if (isWide) ...[
+          const VerticalDivider(width: 1),
+          SizedBox(width: 239, child: _buildCleanupSidebar(context)),
+        ],
       ]),
-      bottomNavigationBar: _cleanupCategory != null || _selected.isEmpty ? null : SafeArea(
+      bottomNavigationBar: _activityView || _cleanupCategory != null || _selected.isEmpty ? null : SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
@@ -900,7 +952,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 color: Colors.white, strokeWidth: 2))
                           : const Icon(Icons.delete_forever_outlined, size: 24),
                       label: Text(_deleting ? 'Working…'
-                          : 'Delete ${_selected.length} selected'),
+                          : 'Delete ${_selected.length} selected · '
+                            '${sizeSummaryLabel(summarizeSizes(_selected, _sizes))}'),
                     ),
                   ],
                 ),

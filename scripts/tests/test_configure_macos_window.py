@@ -10,13 +10,12 @@ spec.loader.exec_module(config)
 
 
 class ConfigureMacosWindowTest(unittest.TestCase):
-    def test_patches_generated_window_and_is_idempotent(self):
+    def test_patches_generated_window_idempotently(self):
         swift = """import Cocoa
 import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     RegisterGeneratedPlugins(registry: flutterViewController)
-    // Siftidy Apple Vision bridge v0.2
     super.awakeFromNib()
   }
 }
@@ -27,10 +26,9 @@ class MainFlutterWindow: NSWindow {
             self.assertTrue(config.install(target))
             result = target.read_text()
             self.assertEqual(result.count(config.MARKER), 1)
-            self.assertIn("setFrameUsingName", result)
-            self.assertIn("setFrameAutosaveName", result)
-            self.assertIn("visibleFrame.width * 0.94", result)
-            self.assertIn("// Siftidy Apple Vision bridge v0.2", result)
+            self.assertIn("visibleFrame", result)
+            self.assertIn("setFrame(visibleFrame, display: true)", result)
+            self.assertNotIn("setFrameUsingName", result)
             self.assertFalse(config.install(target))
             self.assertEqual(result, target.read_text())
 

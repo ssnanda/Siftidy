@@ -1,28 +1,19 @@
 #!/usr/bin/env python3
-"""Set a roomy first-launch macOS window without overriding user resizing.
+"""Open Siftidy in the full usable desktop area without macOS fullscreen.
 
-Called after Flutter generates macos/Runner and after the Vision bridge is
-installed. The native window saves its frame between launches.
+Install into the generated macOS Flutter runner during every build. Never cover
+macOS's menu bar or Dock, and preserve ordinary resizability after opening.
 """
 from pathlib import Path
 
-MARKER = "// Siftidy initial window geometry v0.2"
+MARKER = "// Siftidy usable desktop frame v0.2"
 FRAME_CODE = '''
-    // Siftidy initial window geometry v0.2
-    // Restore a user's previously resized window; use this size only the first time.
-    let siftidyFrameName = "SiftidyMainWindow"
-    if !setFrameUsingName(siftidyFrameName),
-       let visibleFrame = (screen ?? NSScreen.main)?.visibleFrame {
-      let initialWidth: CGFloat = min(1450, visibleFrame.width * 0.94)
-      let initialHeight: CGFloat = min(950, visibleFrame.height * 0.92)
-      let initialFrame = NSRect(
-        x: visibleFrame.midX - initialWidth / 2,
-        y: visibleFrame.midY - initialHeight / 2,
-        width: initialWidth,
-        height: initialHeight)
-      setFrame(initialFrame, display: true)
+    // Siftidy usable desktop frame v0.2
+    // Cover the usable desktop on launch, without entering fullscreen mode.
+    // This deliberately overrides an older saved undersized window frame.
+    if let visibleFrame = (screen ?? NSScreen.main)?.visibleFrame {
+      setFrame(visibleFrame, display: true)
     }
-    setFrameAutosaveName(siftidyFrameName)
 '''
 
 
@@ -41,7 +32,7 @@ def install(window_path: Path) -> bool:
 def main() -> None:
     window = Path("macos/Runner/MainFlutterWindow.swift")
     if install(window):
-        print("Set adaptive 1450x950 first-launch window with saved sizing")
+        print("Siftidy opens across the macOS visible desktop (not fullscreen)")
     else:
         print("Siftidy window sizing already installed")
 
