@@ -3,107 +3,190 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 
+import '../library/library_repository.dart';
 import 'photo_analysis.dart';
 
+/// Snapshot of a progressive local scan. All suggestions need review.
 class CleanupScanResult {
   const CleanupScanResult({
     required this.photos,
     required this.groups,
     required this.total,
+    required this.visited,
     required this.skipped,
     required this.peopleDetectionAvailable,
+    required this.years,
   });
+
   final Map<String, AssetEntity> photos;
   final CleanupGroups groups;
   final int total;
+  final int visited;
   final int skipped;
   final bool peopleDetectionAvailable;
+  final Set<int> years;
 }
 
-/// User-initiated scan. Reads thumbnails and original files locally, serially,
-/// so a large iCloud-backed library does not trigger hundreds of downloads.
+/// Mac PhotoKit is accessed serially; only near-identical thumbnail candidates
+/// require original-file hashing. Normal browsing stays responsive.
 class CleanupScanner {
   static const _vision = MethodChannel('siftidy/vision');
+  static const _pageSize = 64;
+  static const _publishEvery = 64;
 
   Future<CleanupScanResult> scan({
     required bool Function() cancelled,
-    required void Function(int done, int total) progress,
+    required Future<void> Function() waitIfPaused,
+    required void Function(CleanupScanResult snapshot) onProgress,
     Set<String> protectedIds = const {},
+    int? year,
+    bool analyzePeople = false,
   }) async {
-    final paths = await PhotoManager.getAssetPathList(
-      onlyAll: true, type: RequestType.image,
+    final all = await PhotoManager.getAssetPathList(
+      onlyAll: true,
+      type: RequestType.image,
     );
-    if (paths.isEmpty) {
-      final empty = classifyPhotos([]);
-      return CleanupScanResult(photos: {}, groups: empty, total: 0,
-        skipped: 0, peopleDetectionAvailable: true);
-    }
-    final album = paths.first;
-    final total = await album.assetCountAsync;
+    final album = all.isEmpty ? null : all.first;
+    final total = album == null ? 0 : await album.assetCountAsync;
     final scanned = <ScannedPhoto>[];
-    final indexed = <String, AssetEntity>{};
+    final assets = <String, AssetEntity>{};
+    final years = <int>{};
+    final visitedIds = <String>{};
+    final duplicateCandidates = <String, List<AssetEntity>>{};
+    final knownHashes = <String, String?>{};
     var skipped = 0;
-    var scannedCount = 0;
-    var peopleAvailable = true;
+    var visited = 0;
+    var peopleAvailable = analyzePeople;
 
-    for (var page = 0; scannedCount < total && !cancelled(); page++) {
-      final batch = await album.getAssetListPaged(page: page, size: 50);
-      if (batch.isEmpty) break;
-      for (final asset in batch) {
-        if (cancelled()) break;
-        scannedCount++;
-        if (protectedIds.contains(asset.id)) {
-          progress(scannedCount, total);
-          continue;
-        }
-        try {
-          final bytes = await asset.thumbnailDataWithSize(
-            const ThumbnailSize(192, 192),
-            format: ThumbnailFormat.jpeg,
-            quality: 85,
-          );
-          if (bytes == null) {
-            skipped++;
-            continue;
-          }
-          final fingerprint = await compute(fingerprintThumbnail, bytes);
-          if (fingerprint == null) {
-            skipped++;
-            continue;
-          }
-          bool? people;
-          if (peopleAvailable) {
-            try {
-              people = await _vision.invokeMethod<bool>(
-                'hasPeople', Uint8List.fromList(bytes));
-            } on MissingPluginException {
-              peopleAvailable = false;
-            } on PlatformException {
-              // A failed Vision request is unknown, not 'no people'.
-            }
-          }
-          String? digest;
-          try {
-            final original = await asset.originFile;
-            if (original != null) {
-              digest = (await sha256.bind(original.openRead()).first).toString();
-            }
-          } catch (_) {
-            // iCloud or PhotoKit may not expose an original. Never guess exact.
-          }
-          scanned.add(ScannedPhoto(id: asset.id, fingerprint: fingerprint,
-            sha256: digest, hasPeople: people));
-          indexed[asset.id] = asset;
-        } catch (_) {
-          skipped++;
-        } finally {
-          progress(scannedCount, total);
-        }
-      }
-      if (batch.length < 50) break;
+    CleanupScanResult snapshot(CleanupGroups groups) => CleanupScanResult(
+      photos: Map<String, AssetEntity>.of(assets),
+      groups: groups,
+      total: total,
+      visited: visited,
+      skipped: skipped,
+      peopleDetectionAvailable: peopleAvailable,
+      years: Set<int>.of(years),
+    );
+
+    Future<void> publish() async {
+      final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
+      if (!cancelled()) onProgress(snapshot(groups));
     }
-    return CleanupScanResult(photos: indexed,
-      groups: await compute(classifyPhotos, scanned), total: total,
-      skipped: skipped, peopleDetectionAvailable: peopleAvailable);
+
+    Future<String?> hashFile(AssetEntity asset) async {
+      if (knownHashes.containsKey(asset.id)) return knownHashes[asset.id];
+      String? value;
+      try {
+        final original = await asset.originFile;
+        if (original != null) {
+          value = (await sha256.bind(original.openRead()).first).toString();
+        }
+      } catch (_) {
+        // iCloud originals may not be locally accessible. Unknown != exact.
+      }
+      knownHashes[asset.id] = value;
+      return value;
+    }
+
+    Future<void> index(AssetPathEntity path) async {
+      for (var page = 0; !cancelled(); page++) {
+        await waitIfPaused();
+        if (cancelled()) break;
+        final batch = await path.getAssetListPaged(page: page, size: _pageSize);
+        if (batch.isEmpty) break;
+        for (final asset in batch) {
+          await waitIfPaused();
+          if (cancelled()) break;
+          if (!visitedIds.add(asset.id)) continue;
+          visited++;
+          final assetYear = asset.createDateTime.year;
+          years.add(assetYear);
+          if (protectedIds.contains(asset.id) ||
+              (year != null && assetYear != year)) continue;
+          try {
+            final bytes = await asset.thumbnailDataWithSize(
+              const ThumbnailSize(192, 192),
+              format: ThumbnailFormat.jpeg,
+              quality: 80,
+            );
+            if (bytes == null) {
+              skipped++;
+              continue;
+            }
+            final fingerprint = await compute(fingerprintThumbnail, bytes);
+            if (fingerprint == null) {
+              skipped++;
+              continue;
+            }
+            bool? hasPeople;
+            if (analyzePeople && peopleAvailable) {
+              try {
+                hasPeople = await _vision.invokeMethod<bool>(
+                  'hasPeople', bytes,
+                );
+              } on MissingPluginException {
+                peopleAvailable = false;
+              } on PlatformException {
+                // Failed recognition means unknown, never 'no people'.
+              }
+            }
+
+            // Hash original files only when thumbnails look *identical* and
+            // original dimensions also match, not for every library photo.
+            // This can save tens of thousands of large iCloud downloads.
+            final signature = '${asset.width}x${asset.height}:'
+                '${fingerprint.rows.join(",")}:${fingerprint.averageRgb.join(",")}';
+            final peers = duplicateCandidates.putIfAbsent(signature, () => []);
+            String? digest;
+            if (peers.isNotEmpty) {
+              digest = await hashFile(asset);
+              for (final peer in peers) {
+                final peerDigest = await hashFile(peer);
+                final prior = scanned.indexWhere((photo) => photo.id == peer.id);
+                if (prior >= 0 && scanned[prior].sha256 != peerDigest) {
+                  final previous = scanned[prior];
+                  scanned[prior] = ScannedPhoto(
+                    id: previous.id,
+                    fingerprint: previous.fingerprint,
+                    sha256: peerDigest,
+                    hasPeople: previous.hasPeople,
+                  );
+                }
+              }
+            }
+            peers.add(asset);
+            scanned.add(ScannedPhoto(
+              id: asset.id,
+              fingerprint: fingerprint,
+              sha256: digest,
+              hasPeople: hasPeople,
+            ));
+            assets[asset.id] = asset;
+          } catch (_) {
+            skipped++;
+          }
+          if (visited % _publishEvery == 0) await publish();
+        }
+        if (batch.length < _pageSize) break;
+        await publish();
+      }
+    }
+
+    if (album != null) {
+      // Screenshots are scanned first so the first sidebar results arrive fast.
+      final collections = await PhotoManager.getAssetPathList(
+        hasAll: true, type: RequestType.image,
+      );
+      final screenshots = LibraryRepository.smartAlbum(
+        collections,
+        PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
+      );
+      if (screenshots != null && screenshots.id != album.id) {
+        await index(screenshots);
+      }
+      if (!cancelled()) await index(album);
+    }
+    final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
+    return snapshot(groups);
   }
 }
