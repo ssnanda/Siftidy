@@ -102,7 +102,9 @@ class CleanupScanner {
           final assetYear = asset.createDateTime.year;
           years.add(assetYear);
           if (protectedIds.contains(asset.id) ||
-              (year != null && assetYear != year)) continue;
+              (year != null && assetYear != year)) {
+            continue;
+          }
           try {
             final bytes = await asset.thumbnailDataWithSize(
               const ThumbnailSize(192, 192),
@@ -184,7 +186,9 @@ class CleanupScanner {
       if (screenshots != null && screenshots.id != album.id) {
         await index(screenshots);
       }
-      if (!cancelled()) await index(album);
+      if (!cancelled()) {
+      await index(album);
+    }
     }
     final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
     return snapshot(groups);
