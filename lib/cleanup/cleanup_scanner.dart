@@ -52,7 +52,8 @@ class CleanupScanner {
     final assets = <String, AssetEntity>{};
     final years = <int>{};
     final visitedIds = <String>{};
-    final duplicateCandidates = <String, List<AssetEntity>>{};
+    final duplicateCandidates = <String, AssetEntity>{};
+    final scannedPosition = <String, int>{};
     final knownHashes = <String, String?>{};
     var skipped = 0;
     var visited = 0;
@@ -138,25 +139,24 @@ class CleanupScanner {
             // This can save tens of thousands of large iCloud downloads.
             final signature = '${asset.width}x${asset.height}:'
                 '${fingerprint.rows.join(",")}:${fingerprint.averageRgb.join(",")}';
-            final peers = duplicateCandidates.putIfAbsent(signature, () => []);
+            final peer = duplicateCandidates.putIfAbsent(
+              signature, () => asset);
             String? digest;
-            if (peers.isNotEmpty) {
+            if (peer.id != asset.id) {
               digest = await hashFile(asset);
-              for (final peer in peers) {
-                final peerDigest = await hashFile(peer);
-                final prior = scanned.indexWhere((photo) => photo.id == peer.id);
-                if (prior >= 0 && scanned[prior].sha256 != peerDigest) {
-                  final previous = scanned[prior];
-                  scanned[prior] = ScannedPhoto(
-                    id: previous.id,
-                    fingerprint: previous.fingerprint,
-                    sha256: peerDigest,
-                    hasPeople: previous.hasPeople,
-                  );
-                }
+              final peerDigest = await hashFile(peer);
+              final prior = scannedPosition[peer.id];
+              if (prior != null && scanned[prior].sha256 != peerDigest) {
+                final previous = scanned[prior];
+                scanned[prior] = ScannedPhoto(
+                  id: previous.id,
+                  fingerprint: previous.fingerprint,
+                  sha256: peerDigest,
+                  hasPeople: previous.hasPeople,
+                );
               }
             }
-            peers.add(asset);
+            scannedPosition[asset.id] = scanned.length;
             scanned.add(ScannedPhoto(
               id: asset.id,
               fingerprint: fingerprint,
