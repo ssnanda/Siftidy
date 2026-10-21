@@ -63,8 +63,19 @@ Exact Duplicates and Similar Photos show one tile per set (×2, ×3, etc.).
 Choose sets individually or Select All, optionally use **Review copies** to
 choose which original stays, then **Keep one · Delete extras**.
 The native Apple Photos deletion request requires confirmation; Siftidy never
-silently removes the extras. Other cleanup views support Select All and the
-same photo preview and deletion actions as the browser.
+silently removes the extras. In **Review copies**, **Keep all photos** dismisses
+the group without moving, editing or deleting a single image. **Not similar**
+dismisses a mistaken Similar Photos recommendation. Both choices hide that
+suggestion for the current scan, including while more photos are being analyzed.
+Other cleanup views support Select All and the same photo preview and deletion
+actions as the browser.
+
+**Discard scan results** stops any active scan and forgets all suggestions for
+every cleanup category, without modifying Apple Photos. Turn off **Auto scan on
+launch** if you do not want a fresh scan the next time Siftidy starts; otherwise
+you can always run a manual scan later. Separate screenshots now need a stricter
+spatial-layout match before being classified as similar: large white or blank
+areas alone are not enough to consider different screenshots duplicates.
 
 Apple Photos media types and albums appear in the **left** sidebar, while
 Siftidy's cleanup categories and Deletion activity appear in the **right**.

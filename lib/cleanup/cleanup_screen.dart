@@ -51,6 +51,7 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   final Set<String> _selectedPhotos = {};
   final Map<String, String> _keeperChoices = {};
   String? _expanded;
+  late int _observedRevision;
   bool _busy = false;
   String? _message;
 
@@ -60,6 +61,7 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   @override
   void initState() {
     super.initState();
+    _observedRevision = widget.controller.scanRevision;
     _sizes.addListener(_onSizes);
   }
 
@@ -76,7 +78,10 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   @override
   void didUpdateWidget(CleanupWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.category != widget.category) {
+    if (oldWidget.category != widget.category ||
+        _observedRevision != widget.controller.scanRevision ||
+        oldWidget.controller != widget.controller) {
+      _observedRevision = widget.controller.scanRevision;
       _selectedGroups.clear();
       _selectedPhotos.clear();
       _keeperChoices.clear();
@@ -174,6 +179,31 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
       _message = null;
     });
     if (_selectedPhotos.contains(photo.id)) _inspect([photo.id]);
+  }
+
+  void _keepEntireGroup(List<String> group) {
+    if (_busy) return;
+    widget.controller.dismissGroup(group,
+      similar: widget.category == CleanupCategory.similar);
+    setState(() {
+      _selectedGroups.remove(_key(group));
+      _keeperChoices.remove(_key(group));
+      _expanded = null;
+      _message = 'All ${group.length} photos kept; this suggestion was dismissed.';
+    });
+  }
+
+  void _discardScan() {
+    if (_busy) return;
+    widget.controller.discardScan();
+    setState(() {
+      _selectedGroups.clear();
+      _selectedPhotos.clear();
+      _keeperChoices.clear();
+      _expanded = null;
+      _observedRevision = widget.controller.scanRevision;
+      _message = 'Scan results discarded. No photos were changed.';
+    });
   }
 
   void _selectAll(bool value) {
@@ -371,6 +401,13 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                 ),
                 TextButton(onPressed: controller.stop, child: const Text('Stop')),
               ],
+              if (controller.running || controller.result != null ||
+                  controller.error != null)
+                TextButton.icon(
+                  onPressed: _busy ? null : _discardScan,
+                  icon: const Icon(Icons.layers_clear_outlined),
+                  label: const Text('Discard scan results'),
+                ),
               DropdownButton<int?>(
                 value: controller.year,
                 underline: const SizedBox.shrink(),
@@ -419,7 +456,10 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
           if (controller.error != null)
             Text(controller.error!, style: const TextStyle(color: Colors.red)),
           if (_message != null)
-            Text(_message!, style: const TextStyle(color: Colors.red)),
+            Text(_message!, style: TextStyle(color:
+              _message!.contains('failed') || _message!.contains('Unable')
+                  ? Colors.red
+                  : Theme.of(context).colorScheme.primary)),
           if (widget.category == CleanupCategory.noPeople &&
               !controller.analyzingPeople)
             const Text('Enable Analyze people to populate this category.',
@@ -560,9 +600,20 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
       height: 245,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('Review ${group.length} copies · choose which to keep',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-          const Spacer(),
+          Expanded(child: Text(
+            'Review ${group.length} copies · choose which to keep',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600))),
+          TextButton.icon(
+            onPressed: _busy ? null : () => _keepEntireGroup(group),
+            icon: const Icon(Icons.done_all, size: 18),
+            label: const Text('Keep all photos'),
+          ),
+          if (widget.category == CleanupCategory.similar)
+            TextButton(
+              onPressed: _busy ? null : () => _keepEntireGroup(group),
+              child: const Text('Not similar'),
+            ),
           IconButton(tooltip: 'Close review', icon: const Icon(Icons.close),
             onPressed: () => setState(() => _expanded = null)),
         ]),

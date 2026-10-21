@@ -9,12 +9,16 @@ class PhotoFingerprint {
     required this.rows,
     required this.averageRgb,
     required this.sharpness,
+    this.spatialLuma = const [],
   });
 
   /// Eight bytes represent a 9 x 8 difference hash (64 bits).
   final List<int> rows;
   final List<int> averageRgb;
   final double sharpness;
+
+  /// 24 × 24 low-resolution layout for conservative screenshot matching.
+  final List<int> spatialLuma;
 }
 
 /// Runs in a background isolate through Flutter's compute().
@@ -48,6 +52,14 @@ PhotoFingerprint? fingerprintThumbnail(Uint8List bytes) {
       gray[y * 48 + x] = _luma(p);
     }
   }
+  // Keep content position, not just average brightness. Otherwise unrelated
+  // mostly-white screenshots can share the same tiny perceptual hash.
+  final layout = img.copyResize(decoded, width: 24, height: 24);
+  final spatialLuma = <int>[
+    for (var y = 0; y < 24; y++)
+      for (var x = 0; x < 24; x++)
+        _luma(layout.getPixel(x, y)).round().clamp(0, 255).toInt(),
+  ];
   final edges = <double>[];
   for (var y = 1; y < 47; y++) {
     for (var x = 1; x < 47; x++) {
@@ -64,6 +76,7 @@ PhotoFingerprint? fingerprintThumbnail(Uint8List bytes) {
     rows: rows,
     averageRgb: [(r / total).round(), (g / total).round(), (b / total).round()],
     sharpness: variance,
+    spatialLuma: spatialLuma,
   );
 }
 
@@ -85,6 +98,7 @@ int hammingDistance(PhotoFingerprint a, PhotoFingerprint b) {
 bool visuallySimilar(PhotoFingerprint a, PhotoFingerprint b, {
   int maxDistance = 7,
   int maxColorDifference = 32,
+  bool requireScreenshotLayout = false,
 }) {
   if (hammingDistance(a, b) > maxDistance) return false;
   for (var i = 0; i < 3; i++) {
@@ -92,7 +106,37 @@ bool visuallySimilar(PhotoFingerprint a, PhotoFingerprint b, {
       return false;
     }
   }
+  if (requireScreenshotLayout && !matchingScreenshotLayout(a, b)) {
+    return false;
+  }
   return true;
+}
+
+/// Screenshots with large blank regions must agree on actual content layout.
+/// This is intentionally conservative: a missed suggestion is preferable to
+/// grouping two different receipts, messages, documents or app screens.
+bool matchingScreenshotLayout(PhotoFingerprint a, PhotoFingerprint b) {
+  if (a.spatialLuma.length != 24 * 24 ||
+      b.spatialLuma.length != 24 * 24) return false;
+  var difference = 0;
+  var changed = 0;
+  var contrasting = 0;
+  for (var i = 0; i < a.spatialLuma.length; i++) {
+    final first = a.spatialLuma[i];
+    final second = b.spatialLuma[i];
+    final delta = (first - second).abs();
+    difference += delta;
+    if (delta > 20) changed++;
+    if ((first > 230 && second < 200) ||
+        (second > 230 && first < 200)) contrasting++;
+  }
+  for (var channel = 0; channel < 3; channel++) {
+    if ((a.averageRgb[channel] - b.averageRgb[channel]).abs() > 14) {
+      return false;
+    }
+  }
+  return difference / a.spatialLuma.length <= 3.5 &&
+      changed <= 18 && contrasting <= 8;
 }
 
 /// The score depends on thumbnail resolution and content; suggest review only.
@@ -105,11 +149,13 @@ class ScannedPhoto {
     required this.fingerprint,
     this.sha256,
     this.hasPeople,
+    this.isScreenshot = false,
   });
   final String id;
   final PhotoFingerprint fingerprint;
   final String? sha256;
   final bool? hasPeople;
+  final bool isScreenshot;
 }
 
 class CleanupGroups {
@@ -148,10 +194,13 @@ CleanupGroups classifyPhotos(List<ScannedPhoto> photos) {
     for (final clusterIndex in possible) {
       final group = clusters[clusterIndex];
       final representative = group.first;
+      // Do not use a blank-looking screenshot to anchor an unrelated group.
+      if (item.isScreenshot != representative.isScreenshot) continue;
       if (item.sha256 != null && item.sha256 == representative.sha256) {
         continue; // Exact duplicates have their own section.
       }
-      if (visuallySimilar(item.fingerprint, representative.fingerprint)) {
+      if (visuallySimilar(item.fingerprint, representative.fingerprint,
+          requireScreenshotLayout: item.isScreenshot)) {
         group.add(item);
         assigned = true;
         break;

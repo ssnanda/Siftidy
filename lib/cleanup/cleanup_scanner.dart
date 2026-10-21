@@ -89,7 +89,7 @@ class CleanupScanner {
       return value;
     }
 
-    Future<void> index(AssetPathEntity path) async {
+    Future<void> index(AssetPathEntity path, {bool isScreenshot = false}) async {
       for (var page = 0; !cancelled(); page++) {
         await waitIfPaused();
         if (cancelled()) break;
@@ -138,7 +138,8 @@ class CleanupScanner {
             // original dimensions also match, not for every library photo.
             // This can save tens of thousands of large iCloud downloads.
             final signature = '${asset.width}x${asset.height}:'
-                '${fingerprint.rows.join(",")}:${fingerprint.averageRgb.join(",")}';
+                '${fingerprint.rows.join(",")}:${fingerprint.averageRgb.join(",")}:'
+                '${isScreenshot ? sha1.convert(fingerprint.spatialLuma) : ""}';
             final peer = duplicateCandidates.putIfAbsent(
               signature, () => asset);
             String? digest;
@@ -153,6 +154,7 @@ class CleanupScanner {
                   fingerprint: previous.fingerprint,
                   sha256: peerDigest,
                   hasPeople: previous.hasPeople,
+                  isScreenshot: previous.isScreenshot,
                 );
               }
             }
@@ -162,6 +164,7 @@ class CleanupScanner {
               fingerprint: fingerprint,
               sha256: digest,
               hasPeople: hasPeople,
+              isScreenshot: isScreenshot,
             ));
             assets[asset.id] = asset;
           } catch (_) {
@@ -184,7 +187,7 @@ class CleanupScanner {
         PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
       );
       if (screenshots != null && screenshots.id != album.id) {
-        await index(screenshots);
+        await index(screenshots, isScreenshot: true);
       }
       if (!cancelled()) {
       await index(album);

@@ -19,30 +19,39 @@ class CleanupController extends ChangeNotifier {
   DateTime? _startedAt;
   Duration? _eta;
   bool _cancel = false;
+  int _scanGeneration = 0;
+  int get scanRevision => _scanGeneration;
   bool _disposed = false;
   bool _settingsLoaded = false;
   Set<String> _protected = {};
   final Set<String> _excluded = {};
+  final Set<String> _dismissedExact = {};
+  final Set<String> _dismissedSimilar = {};
 
   int get visited => result?.visited ?? 0;
   int get total => result?.total ?? 0;
   double get fraction => total == 0 ? 0 : (visited / total).clamp(0.0, 1.0);
   Duration? get eta => _eta;
-  int get exactCount => _filteredGroups(result?.groups.exact ?? []).fold(0,
-      (n, group) => n + (group.length - 1));
-  int get similarCount => _filteredGroups(result?.groups.similar ?? []).fold(0,
-      (n, group) => n + (group.length - 1));
+  int get exactCount =>
+      exact.fold(0, (n, group) => n + (group.length - 1));
+  int get similarCount =>
+      similar.fold(0, (n, group) => n + (group.length - 1));
 
-  List<List<String>> get exact => _filteredGroups(result?.groups.exact ?? []);
-  List<List<String>> get similar => _filteredGroups(result?.groups.similar ?? []);
+  List<List<String>> get exact =>
+      _filteredGroups(result?.groups.exact ?? [], _dismissedExact);
+  List<List<String>> get similar =>
+      _filteredGroups(result?.groups.similar ?? [], _dismissedSimilar);
   List<String> get blurry => (result?.groups.blurry ?? [])
       .where((id) => !_excluded.contains(id)).toList();
   List<String> get noPeople => (result?.groups.noPeople ?? [])
       .where((id) => !_excluded.contains(id)).toList();
 
-  List<List<String>> _filteredGroups(List<List<String>> source) => [
+  List<List<String>> _filteredGroups(
+    List<List<String>> source, Set<String> dismissed,
+  ) => [
     for (final group in source)
-      if (group.where((id) => !_excluded.contains(id)).length > 1)
+      if (!group.any(dismissed.contains) &&
+          group.where((id) => !_excluded.contains(id)).length > 1)
         group.where((id) => !_excluded.contains(id)).toList(),
   ];
 
@@ -75,6 +84,7 @@ class CleanupController extends ChangeNotifier {
 
   Future<void> start({int? scopeYear, bool? people}) async {
     if (running) return;
+    final generation = ++_scanGeneration;
     _cancel = false;
     year = scopeYear;
     analyzingPeople = people ?? analyzingPeople;
@@ -84,22 +94,24 @@ class CleanupController extends ChangeNotifier {
     error = null;
     result = null;
     _excluded.clear();
+    _dismissedExact.clear();
+    _dismissedSimilar.clear();
     _startedAt = DateTime.now();
     _eta = null;
     _notify();
     try {
       final finalResult = await _scanner.scan(
-        cancelled: () => _cancel || _disposed,
+        cancelled: () => _cancel || _disposed || generation != _scanGeneration,
         waitIfPaused: () async {
-          while (paused && !_cancel && !_disposed) {
+          while (paused && !_cancel && !_disposed && generation == _scanGeneration) {
             await Future<void>.delayed(const Duration(milliseconds: 200));
           }
         },
-        protectedIds: _protected,
+        protectedIds: Set<String>.of(_protected),
         year: year,
         analyzePeople: analyzingPeople,
         onProgress: (snapshot) {
-          if (_disposed || _cancel) return;
+          if (_disposed || _cancel || generation != _scanGeneration) return;
           result = snapshot;
           final elapsed = DateTime.now().difference(_startedAt!);
           // Show a measured ETA only after a meaningful sample. No fake ETA.
@@ -112,17 +124,21 @@ class CleanupController extends ChangeNotifier {
           _notify();
         },
       );
-      if (!_disposed) {
+      if (!_disposed && !_cancel && generation == _scanGeneration) {
         result = finalResult;
-        completed = !_cancel;
+        completed = true;
         _eta = null;
       }
     } catch (e) {
-      if (!_disposed) error = '$e';
+      if (!_disposed && generation == _scanGeneration && !_cancel) {
+        error = '$e';
+      }
     } finally {
-      running = false;
-      paused = false;
-      _notify();
+      if (!_disposed && generation == _scanGeneration) {
+        running = false;
+        paused = false;
+        _notify();
+      }
     }
   }
 
@@ -138,6 +154,32 @@ class CleanupController extends ChangeNotifier {
     _notify();
   }
 
+  /// Dismiss this recommendation while leaving every Photos asset untouched.
+  /// Suppression survives progressive updates within this scan, but a new
+  /// explicit scan starts fresh.
+  void dismissGroup(Iterable<String> ids, {required bool similar}) {
+    (similar ? _dismissedSimilar : _dismissedExact).addAll(ids);
+    _notify();
+  }
+
+  /// Stop work and forget ALL suggestions (including partial results). An
+  /// in-flight older scan cannot restore its results after being discarded.
+  void discardScan() {
+    _scanGeneration++;
+    _cancel = true;
+    running = false;
+    paused = false;
+    completed = false;
+    result = null;
+    error = null;
+    _eta = null;
+    _startedAt = null;
+    _excluded.clear();
+    _dismissedExact.clear();
+    _dismissedSimilar.clear();
+    _notify();
+  }
+
   void exclude(Iterable<String> ids) {
     _excluded.addAll(ids);
     _notify();
@@ -146,6 +188,7 @@ class CleanupController extends ChangeNotifier {
   @override
   void dispose() {
     _cancel = true;
+    _scanGeneration++;
     _disposed = true;
     super.dispose();
   }
