@@ -55,3 +55,26 @@ Siftidy currently disables Flutter's default macOS Impeller renderer to investig
 ## Siftidy branding
 
 The photo-stack icon is the Siftidy identity: layered photo cards, a golden sun, and teal/blue mountains. The editable vector design is at `assets/branding/siftidy_mark.svg`. The Flutter header paints a matching lightweight mark with no image decoding; the macOS bootstrap uses `scripts/render_macos_icon.swift` to generate matching icon assets from 16 to 1024 pixels for Finder and the Dock. The build ships those native icons as part of the macOS application, without any added image/network dependency.
+
+
+## Duplicate groups, deletion sizes and activity
+
+Exact Duplicates and Similar Photos show one tile per set (×2, ×3, etc.).
+Choose sets individually or Select All, optionally use **Review copies** to
+choose which original stays, then **Keep one · Delete extras**.
+The native Apple Photos deletion request requires confirmation; Siftidy never
+silently removes the extras. Other cleanup views support Select All and the
+same photo preview and deletion actions as the browser.
+
+Apple Photos media types and albums appear in the **left** sidebar, while
+Siftidy's cleanup categories and Deletion activity appear in the **right**.
+The Mac window fills the usable screen area below the menu bar (not fullscreen)
+on every launch and remains resizable.
+
+Selected original-file sizes are measured lazily when available; iCloud may
+download originals, and unknown sizes are explicitly labeled. **Deletion
+activity** records the count and measured sizes of media deleted by Siftidy.
+Apple Photos' protected **Recently Deleted** contents cannot be read or emptied
+through Siftidy's ordinary PhotoKit access. The left sidebar shortcut opens
+Apple Photos so users can inspect or empty it directly. Siftidy therefore
+reports neither its live item count nor confirmed disk space freed.

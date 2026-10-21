@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
@@ -383,6 +385,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
         _sidebarTile(context, Icons.bookmark_rounded,
           'Siftidy Keepers', MediaFilter.keepers, closeDrawer: closeDrawer),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: ListTile(
+            dense: true,
+            leading: const Icon(Icons.delete_outline),
+            title: const Text('Recently Deleted ↗'),
+            subtitle: const Text('View in Apple Photos'),
+            onTap: () async {
+              if (closeDrawer) {
+                Navigator.pop(context);
+              }
+              await Process.run('/usr/bin/open', ['-a', 'Photos']);
+            },
+          ),
+        ),
         for (final album in _userAlbums)
           if (album.name != LibraryRepository.keeperAlbumName)
             _sidebarTile(context, Icons.folder_outlined, album.name,
