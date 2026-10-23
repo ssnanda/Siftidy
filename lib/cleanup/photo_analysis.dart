@@ -156,12 +156,94 @@ class ScannedPhoto {
     this.sha256,
     this.hasPeople,
     this.isScreenshot = false,
+    this.createdAtMs = 0,
+    this.latitude,
+    this.longitude,
+    this.accidentalReason,
   });
   final String id;
   final PhotoFingerprint fingerprint;
   final String? sha256;
   final bool? hasPeople;
   final bool isScreenshot;
+  final int createdAtMs;
+  final double? latitude, longitude;
+  final String? accidentalReason;
+}
+
+/// Local PhotoKit references and a session hint, not moved photo files.
+class PropertyTourSuggestion {
+  const PropertyTourSuggestion({
+    required this.ids, required this.startedAtMs, this.latitude, this.longitude,
+  });
+  final List<String> ids;
+  final int startedAtMs;
+  final double? latitude, longitude;
+}
+
+/// Quickly proposes consecutive camera-photo sessions. These are not property
+/// tours until independent on-device visual evidence validates them.
+List<PropertyTourSuggestion> propertySessionCandidates(
+    List<ScannedPhoto> photos, {int minPhotos = 5}) {
+  final sorted = photos.where((p) => !p.isScreenshot && p.createdAtMs > 0)
+      .toList()..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
+  final sessions = <PropertyTourSuggestion>[];
+  final current = <ScannedPhoto>[];
+  double? anchorLat, anchorLon;
+  void finish() {
+    if (current.length >= minPhotos) {
+      sessions.add(PropertyTourSuggestion(
+        ids: current.map((p) => p.id).toList(),
+        startedAtMs: current.first.createdAtMs,
+        latitude: anchorLat, longitude: anchorLon,
+      ));
+    }
+    current.clear();
+    anchorLat = null;
+    anchorLon = null;
+  }
+  for (final item in sorted) {
+    if (current.isNotEmpty) {
+      final gap = item.createdAtMs - current.last.createdAtMs;
+      final elapsed = item.createdAtMs - current.first.createdAtMs;
+      final displaced = item.latitude != null && item.longitude != null &&
+          anchorLat != null && anchorLon != null &&
+          _geoMeters(item.latitude!, item.longitude!, anchorLat!, anchorLon!) > 200;
+      if (gap > const Duration(minutes: 20).inMilliseconds ||
+          elapsed > const Duration(minutes: 90).inMilliseconds ||
+          gap < 0 || displaced || current.length >= 100) {
+        finish();
+      }
+    }
+    current.add(item);
+    anchorLat ??= item.latitude;
+    anchorLon ??= item.longitude;
+  }
+  finish();
+  return sessions;
+}
+
+double _geoMeters(double lat1, double lon1, double lat2, double lon2) {
+  const rad = math.pi / 180;
+  final deltaLat = (lat2 - lat1) * rad;
+  final deltaLon = (lon2 - lon1) * rad;
+  final v = math.pow(math.sin(deltaLat / 2), 2).toDouble() +
+      math.cos(lat1 * rad) * math.cos(lat2 * rad) *
+      math.pow(math.sin(deltaLon / 2), 2).toDouble();
+  return 12742000 * math.asin(math.min(1, math.sqrt(v)));
+}
+
+/// A deliberately narrow low-information screenshot detector. Dark photos
+/// are excluded by isScreenshot; documents retain visible text/edge contrast.
+String? blankScreenshotReason(PhotoFingerprint f) {
+  if (f.spatialLuma.length != 576) return null;
+  final values = f.spatialLuma;
+  final average = values.reduce((a, b) => a + b) / values.length;
+  final dark = values.where((v) => v < 35).length;
+  final light = values.where((v) => v > 248).length;
+  if (dark >= 566 && average < 25) return 'Almost blank dark screenshot';
+  if (light >= 570 && average > 251) return 'Almost blank light screenshot';
+  return null;
 }
 
 class CleanupGroups {
@@ -170,11 +252,21 @@ class CleanupGroups {
     required this.similar,
     required this.blurry,
     required this.noPeople,
+    this.accidentalScreenshots = const [],
+    this.accidentalReasons = const {},
+    this.propertyTours = const [],
   });
   final List<List<String>> exact;
   final List<List<String>> similar;
   final List<String> blurry;
   final List<String> noPeople;
+  final List<String> accidentalScreenshots;
+  final Map<String, String> accidentalReasons;
+  final List<PropertyTourSuggestion> propertyTours;
+  CleanupGroups withPropertyTours(List<PropertyTourSuggestion> tours) =>
+      CleanupGroups(exact: exact, similar: similar, blurry: blurry,
+        noPeople: noPeople, accidentalScreenshots: accidentalScreenshots,
+        accidentalReasons: accidentalReasons, propertyTours: tours);
 }
 
 CleanupGroups classifyPhotos(List<ScannedPhoto> photos) {
@@ -243,6 +335,24 @@ CleanupGroups classifyPhotos(List<ScannedPhoto> photos) {
   }
   final similar = clusters.where((g) => g.length > 1)
       .map((g) => g.map((p) => p.id).toList()).toList();
+  final screenshotReasons = <String, String>{};
+  final screenshots = photos.where((p) => p.isScreenshot).toList()
+    ..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
+  for (var i = 0; i < screenshots.length; i++) {
+    final shot = screenshots[i];
+    final reason = shot.accidentalReason ?? blankScreenshotReason(shot.fingerprint);
+    if (reason != null) { screenshotReasons[shot.id] = reason; continue; }
+    if (shot.createdAtMs <= 0) continue;
+    // Compare only a few very recent captures, not an unbounded global bucket.
+    for (var j = i - 1; j >= 0 && j >= i - 4; j--) {
+      final earlier = screenshots[j];
+      if (shot.createdAtMs - earlier.createdAtMs > 90000) break;
+      if (matchingScreenshotLayout(shot.fingerprint, earlier.fingerprint)) {
+        screenshotReasons[shot.id] = 'Repeated screenshot within 90 seconds';
+        break;
+      }
+    }
+  }
   return CleanupGroups(
     exact: exact,
     similar: similar,
@@ -250,5 +360,7 @@ CleanupGroups classifyPhotos(List<ScannedPhoto> photos) {
         .map((p) => p.id).toList(),
     noPeople: photos.where((p) => p.hasPeople == false)
         .map((p) => p.id).toList(),
+    accidentalScreenshots: screenshotReasons.keys.toList(),
+    accidentalReasons: screenshotReasons,
   );
 }
