@@ -6,6 +6,7 @@ import 'package:siftidy/cleanup/cleanup_controller.dart';
 import 'package:siftidy/cleanup/cleanup_scanner.dart';
 import 'package:siftidy/cleanup/photo_analysis.dart';
 import 'package:siftidy/cleanup/scan_checkpoint.dart';
+import 'package:siftidy/cleanup/scan_result_archive.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,44 @@ void main() {
       expect(controller.fraction, closeTo(0.02, 0.00001));
       expect(controller.resumeStatus, contains('Restored 2'));
       expect(controller.running, isFalse);
+      controller.dispose();
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('completed sessions restore their result counts without autoscanning',
+      () async {
+    SharedPreferences.setMockInitialValues({'cleanup_auto_scan_v02': true});
+    final directory = await Directory.systemTemp.createTemp('siftidy-complete-');
+    try {
+      final store = await ScanCheckpointStore.open(folder: directory);
+      final session = await store.begin(
+        year: null, people: false, total: 4);
+      await store.append([
+        for (var i = 0; i < 4; i++)
+          ScanRow('photo-$i', 2026, 800, 600),
+      ], mode: 'eco', elapsedMs: 4000, cpu: 3, ram: 120);
+      await ScanResultArchive(directory).save(
+        started: session.started, total: 4, analyzed: 4,
+        groups: const CleanupGroups(
+          exact: [['photo-0', 'photo-1']],
+          similar: [], blurry: ['photo-2'], noPeople: [],
+        ));
+      await store.finish('complete');
+
+      final restored = await ScanCheckpointStore.open(folder: directory);
+      final controller = CleanupController()..checkpointStore = restored;
+      await controller.initialize();
+      expect(controller.completed, isTrue);
+      expect(controller.visited, 4);
+      expect(controller.exactCount, 1);
+      expect(controller.blurry, ['photo-2']);
+      await controller.startIfEnabled(const {});
+      expect(controller.running, isFalse);
+      expect(controller.starting, isFalse);
+      expect(controller.scanRevision, 0);
+      expect(controller.exactCount, 1);
       controller.dispose();
     } finally {
       await directory.delete(recursive: true);
