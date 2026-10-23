@@ -157,30 +157,30 @@ class CleanupScanner {
         final candidateTours = propertySessionCandidates(scanned);
         final confirmedTours = <PropertyTourSuggestion>[];
         for (final tour in candidateTours) {
-          if (cancelled()) break;
+          if (cancelled()) { break; }
           await waitIfPaused();
           final ids = tour.ids;
           final sampleIndices = <int>{0, ids.length ~/ 4,
               ids.length ~/ 2, (ids.length * 3) ~/ 4, ids.length - 1};
           var evidence = 0;
           for (final index in sampleIndices) {
-            if (cancelled()) break;
+            if (cancelled()) { break; }
             final asset = assets[ids[index]];
-            if (asset == null) continue;
+            if (asset == null) { continue; }
             try {
               final bytes = await asset.thumbnailDataWithSize(
                 const ThumbnailSize(360, 360),
                 format: ThumbnailFormat.jpeg, quality: 78,
               ).timeout(const Duration(seconds: 12));
-              if (bytes == null) continue;
+              if (bytes == null) { continue; }
               final yes = await _vision.invokeMethod<bool>(
                   'propertyEvidence', bytes).timeout(const Duration(seconds: 10));
-              if (yes == true) evidence++;
+              if (yes == true) { evidence++; }
             } catch (_) {
               // Unavailable image or Vision is unknown, never positive.
             }
           }
-          if (evidence >= 2) confirmedTours.add(tour);
+          if (evidence >= 2) { confirmedTours.add(tour); }
         }
         if (!cancelled()) {
           groups = groups.withPropertyTours(confirmedTours);
