@@ -25,7 +25,7 @@ extension ScanModeDetails on ScanMode {
   int get concurrency => switch (this) {
         ScanMode.minimal || ScanMode.eco => 1,
         ScanMode.balanced => 2,
-        ScanMode.turbo => 4,
+        ScanMode.turbo => 6,
       };
 
   Duration get minimumPacing => switch (this) {
