@@ -178,32 +178,41 @@ When a scan is active, **Quit Completely** offers:
 
 Pause & Quit has a **20-second maximum**, after which a separate native watchdog terminates Siftidy even if the Flutter worker is hung. The last *committed* checkpoint survives a forced quit; unfinished individual operations might have to be retried. These controls never delete photos.
 
-## Dashboard, Scan Center & saved scan results
+## Dashboard, scan lifecycle & saved results
 
-Siftidy opens on a **Dashboard** with the live scan state, four cleanup result
-tiles, and **five recent scans**. The Scan percentage button returns to the
-Dashboard instead of opening Exact duplicates. Media browsing and the existing
-cleanup review pages remain available in the sidebars.
+Siftidy opens on one **Dashboard** rather than a separate Scan Center. Its
+scan card provides **Scan now**, **Scan again** after completion, or **Resume
+scan** after interruption. While running it shows Pause/Resume and Stop,
+with a visible **Minimal/Eco/Balanced/Turbo** speed selector, timed Turbo
+(30/60/120 minutes), and an idle-on-AC Turbo control. Advanced options remain
+under the gear. Once every photo has been indexed, the status reads
+**Finalizing results** until result grouping and checkpoint saving succeed;
+100% does not falsely mean the analysis has already completed.
 
-**Scan Center** holds active progress, Resume/Pause/Stop, all available scan
-history, cache location and real disk usage. **Scan settings** contains the
-Minimal/Eco/Balanced/Turbo selection, timed Turbo, idle Turbo, auto scan on
-launch, next-scan year scope and people analysis. Automated time-of-day
-scheduling is a separate remaining v0.2 milestone, not represented by a fake
-switch.
+The Dashboard shows the four result categories and five recent scan records.
+**History & storage** expands in place to show up to 30 scan records,
+individual read-only results, storage usage, and Finder access. There is
+no redundant Scan Center page or extra navigation button.
 
-Each **completed scan** stores an independent read-only results snapshot in
-`ScanData/snapshots/scan-<timestamp>.json`. It contains group asset IDs and
-counts, not full-resolution images, and does **not** replace the active
-checkpoint. The five recent scan records display status, duration, visited
-photos, and (when available) all four result counts and snapshot file size.
-Saved results can be opened read-only, and individual historical records can
-be deleted after confirmation without deleting a single photo or the current
-resumable checkpoint. Older history entries that predate snapshots continue
-to display as summary-only; the application does not fabricate historical
-results.
+On relaunch, a **completed** checkpoint loads saved result groups quickly and
+does **not** automatically run the entire scan again. Relevant PhotoKit
+references for interactive review are rehydrated on demand, without decoding
+or reanalyzing all 49,000 photos. Auto scan on launch starts a first scan
+or resumes unfinished work, rather than rerunning an already completed scan.
+An explicit **Scan again** creates a fresh journal and new scan history entry
+even with unchanged scope; the previous completed snapshot and metrics
+remain available. **Resume** retains the interrupted session's checkpoint.
+If scan results are still being finalized, the UI continues to show the
+work as active, not Completed.
 
-For now only **completed scans** create independent snapshot files. Paused,
-stopped, and failed runs retain their history summary and recoverable active
-checkpoint. The existing gallery-based live review continues to be the path
-for performing deliberate, confirmed PhotoKit cleanup actions.
+Each completed scan saves an independent read-only JSON snapshot under
+`ScanData/snapshots/scan-<timestamp>.json`. It contains asset IDs and result
+groups, never original full-resolution photos. Deleting scan history removes
+only that Siftidy record and its snapshot, not an Apple Photos asset or
+the current resumable checkpoint. Older sessions without saved grouping files
+remain summary-only. Scene/object counts distinguish **not analyzed** from
+a real zero.
+
+Time-of-day scheduling is a separate remaining v0.2 milestone. All
+cleanup decisions remain review-first and require deliberate PhotoKit
+confirmation.
