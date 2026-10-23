@@ -1,7 +1,30 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:siftidy/library/scan_display.dart';
 
 void main() {
+  testWidgets('scan badge has no animated spinner while scanning', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: ScanProgressButton(
+        running: true, completed: false, visited: 93, total: 100,
+      )),
+    ));
+    expect(find.text('Scan 93%'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(RefreshProgressIndicator), findsNothing);
+  });
+
+  testWidgets('saved partial scan has same static badge while paused',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: ScanProgressButton(
+        running: false, completed: false, visited: 93, total: 100,
+      )),
+    ));
+    expect(find.text('Scan 93%'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   test('while running the top indicator has scan percent only', () {
     expect(
       scanButtonLabel(

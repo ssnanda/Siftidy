@@ -857,19 +857,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-            child: OutlinedButton.icon(
+            child: ScanProgressButton(
               onPressed: _deleting ? null :
                   () => _chooseCleanup(CleanupCategory.exact),
-              icon: _cleanup.running
-                  ? const SizedBox(width: 17, height: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.auto_awesome_outlined, size: 19),
-              label: Text(scanButtonLabel(
-                running: _cleanup.running,
-                completed: _cleanup.completed,
-                visited: _cleanup.visited,
-                total: _cleanup.total,
-              )),
+              running: _cleanup.running,
+              completed: _cleanup.completed,
+              visited: _cleanup.visited,
+              total: _cleanup.total,
             ),
           ),
           if (!isWide)
