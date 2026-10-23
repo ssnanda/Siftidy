@@ -64,6 +64,7 @@ class CleanupScanner {
     Set<String> protectedIds = const {},
     int? year,
     bool analyzePeople = false,
+    bool forceFresh = false,
   }) async {
     final all = await PhotoManager.getAssetPathList(
       onlyAll: true, type: RequestType.image,
@@ -71,7 +72,8 @@ class CleanupScanner {
     final album = all.isEmpty ? null : all.first;
     final total = album == null ? 0 : await album.assetCountAsync;
     final checkpoint = await checkpointStore.begin(
-      year: year, people: analyzePeople, total: total);
+      year: year, people: analyzePeople, total: total,
+      forceFresh: forceFresh);
     final restored = Map<String, ScanRow>.of(checkpoint.rows);
     final pending = <ScanRow>[];
     var lastSavedAt = DateTime.now();
@@ -140,7 +142,7 @@ class CleanupScanner {
           freshAnalyzedSinceClassification >= _classifyAfterNewPhotos) {
         reportPhase('Updating cleanup suggestions');
         groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned))
-            .timeout(const Duration(seconds: 30),
+            .timeout(Duration(seconds: finalPass ? 120 : 30),
                 onTimeout: () => throw TimeoutException(
                     'Cleanup grouping exceeded 30 seconds.'));
         freshAnalyzedSinceClassification = 0;
