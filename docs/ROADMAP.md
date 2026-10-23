@@ -5,8 +5,8 @@ Siftidy is a **macOS-only**, privacy-first personal media cleanup app. The prior
 | Version | Focus | Priority |
 | --- | --- | --- |
 | **0.1** | Media browsing, selection, deletion, updates | Existing foundation |
-| **0.2** | Scan stability, scheduling, performance and history | **Current** |
-| **0.3** | Smart Organization + practical cleanup | **Next** |
+| **0.2** | Scan stability, performance and history | Foundation |
+| **0.3** | Smart Organization: accidental screenshots and property tours | **Current** |
 | **0.4** | Advanced bulk cleanup and intelligent recommendations | Later |
 | **0.5** | Verified backup, archive and restore | Later |
 | **0.6** | Advanced organization and searchable collections | Later |
@@ -14,7 +14,7 @@ Siftidy is a **macOS-only**, privacy-first personal media cleanup app. The prior
 | **0.8** | OCR search and automation | Later |
 | **1.0** | Stable personal release | Target |
 
-## 0.2 — Scan foundation (current)
+## 0.2 — Scan foundation
 
 **Finish reliability before adding new detection features.**
 
@@ -42,7 +42,17 @@ The last phase may use **Claude or Codex** to inspect user-selected example imag
 
 Existing exact-duplicate, similar-photo, blurry-photo and people-detection *review tools* are retained; substantial new intelligence in these tools is not the primary focus of 0.2.
 
-## 0.3 — Smart Organization + practical cleanup (next)
+## 0.3 — Smart Organization + practical cleanup (current)
+
+**Shipped for testing:** six result tiles; on-device possible lock-screen,
+near-blank and repeated-screenshot detection; 5+ consecutive property-photo
+sessions validated with Apple Vision; local editable tour names and explicit
+Apple reverse geocoding. Saved result snapshots and dismissals persist. These
+are conservative *suggestions*, never automatic deletion, new Photos albums
+or silent network calls. A new v0.3 scan is required; historical v0.2 results
+show "not analyzed" rather than invented counts. Model quality on actual
+personal-photo libraries is not yet verified and remains a v0.3 validation task.
+
 
 Deliver useful day-to-day ways to sort and organize media and review obvious clutter. Favor understandable, review-first workflows and user control over ambitious automatic recommendations.
 
