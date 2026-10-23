@@ -230,6 +230,8 @@ class CleanupController extends ChangeNotifier {
             total: scan.total,
             analyzed: scan.analyzed,
             groups: finalResult.groups,
+            peopleAnalyzed: scan.people &&
+                finalResult.peopleDetectionAvailable,
           );
         }
         await checkpointStore?.finish('complete');
