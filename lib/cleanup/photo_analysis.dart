@@ -185,7 +185,7 @@ class PropertyTourSuggestion {
 /// tours until independent on-device visual evidence validates them.
 List<PropertyTourSuggestion> propertySessionCandidates(
     List<ScannedPhoto> photos, {int minPhotos = 5}) {
-  final sorted = photos.where((p) => !p.isScreenshot && p.createdAtMs > 0)
+  final sorted = photos.where((p) => p.createdAtMs > 0)
       .toList()..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
   final sessions = <PropertyTourSuggestion>[];
   final current = <ScannedPhoto>[];
@@ -203,6 +203,10 @@ List<PropertyTourSuggestion> propertySessionCandidates(
     anchorLon = null;
   }
   for (final item in sorted) {
+    if (item.isScreenshot) {
+      finish();
+      continue;
+    }
     if (current.isNotEmpty) {
       final gap = item.createdAtMs - current.last.createdAtMs;
       final elapsed = item.createdAtMs - current.first.createdAtMs;
