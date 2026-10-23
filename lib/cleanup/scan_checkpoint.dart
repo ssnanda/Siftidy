@@ -111,10 +111,10 @@ class ScanCheckpointStore {
   }
 
   Future<ScanCheckpoint?> load() async {
-    if (!await _state.exists()) return null;
+    if (!await _state.exists()) { return null; }
     try {
       final d = jsonDecode(await _state.readAsString()) as Map<String, dynamic>;
-      if (d['schema'] != 1 || d['algorithm'] != 3) return null;
+      if (d['schema'] != 1 || d['algorithm'] != 3) { return null; }
       final scan = ScanCheckpoint.fromJson(d);
       if (await _journal.exists()) {
         for (final line in await _journal.readAsLines()) {
@@ -139,7 +139,7 @@ class ScanCheckpointStore {
       required bool people, required int total}) async {
     final old = current ?? await load();
     if (old != null && old.year == year && old.people == people &&
-        old.total == total) return old;
+        old.total == total) { return old; }
     if (old != null) { await finish('replaced'); }
     final fresh = ScanCheckpoint(started: DateTime.now(),
         year: year, people: people, total: total);
@@ -152,7 +152,7 @@ class ScanCheckpointStore {
   Future<void> append(List<ScanRow> entries, {required String mode,
       required int elapsedMs, required double cpu, required double ram}) async {
     final scan = current;
-    if (scan == null) return;
+    if (scan == null) { return; }
     if (entries.isNotEmpty) {
       final data = '${entries.map((e) => jsonEncode(e.toJson())).join('\n')}\n';
       await _journal.writeAsString(data, mode: FileMode.append, flush: true);
@@ -168,7 +168,7 @@ class ScanCheckpointStore {
 
   Future<void> finish(String status) async {
     final scan = current;
-    if (scan == null) return;
+    if (scan == null) { return; }
     if (status == 'complete') {
       scan.complete = true;
       await _writeState(scan);
@@ -195,7 +195,7 @@ class ScanCheckpointStore {
 
   Future<List<Map<String, dynamic>>> readHistory() async {
     try {
-      if (!await _history.exists()) return [];
+      if (!await _history.exists()) { return []; }
       return (jsonDecode(await _history.readAsString()) as List)
         .map((item) => Map<String, dynamic>.from(item as Map)).toList();
     } catch (_) { return []; }
