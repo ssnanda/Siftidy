@@ -34,13 +34,13 @@ class _PropertyToursViewState extends State<PropertyToursView> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
+    if (!mounted) { return; }
     setState(() {
       for (final tour in widget.tours) {
         final id = _key(tour);
         final saved = prefs.getString('property_label_$id');
-        if (saved != null) _labels[id] = saved;
-        if (prefs.getBool('property_rejected_$id') == true) _rejected.add(id);
+        if (saved != null) { _labels[id] = saved; }
+        if (prefs.getBool('property_rejected_$id') == true) { _rejected.add(id); }
       }
     });
   }
@@ -72,11 +72,11 @@ class _PropertyToursViewState extends State<PropertyToursView> {
     final key = _key(tour);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('property_rejected_$key', true);
-    if (mounted) setState(() => _rejected.add(key));
+    if (mounted) { setState(() => _rejected.add(key)); }
   }
 
   Future<void> _lookupAddress(PropertyTourSuggestion tour) async {
-    if (tour.latitude == null || tour.longitude == null) return;
+    if (tour.latitude == null || tour.longitude == null) { return; }
     final key = _key(tour);
     setState(() { _busyTour = key; _message = null; });
     try {
@@ -85,7 +85,7 @@ class _PropertyToursViewState extends State<PropertyToursView> {
         'latitude': tour.latitude!,
         'longitude': tour.longitude!,
       });
-      if (!mounted) return;
+      if (!mounted) { return; }
       if (address == null || address.trim().isEmpty) {
         setState(() => _message = 'Apple did not return a street address.');
         return;
@@ -95,13 +95,13 @@ class _PropertyToursViewState extends State<PropertyToursView> {
           .text = address;
       await _save(tour);
     } on PlatformException catch (error) {
-      if (mounted) setState(() => _message =
-          'Address lookup failed: ${error.message ?? error.code}');
+      if (mounted) { setState(() => _message =
+          'Address lookup failed: ${error.message ?? error.code}'); }
     } on MissingPluginException {
-      if (mounted) setState(() => _message =
-          'Address lookup is unavailable in this build.');
+      if (mounted) { setState(() => _message =
+          'Address lookup is unavailable in this build.'); }
     } finally {
-      if (mounted) setState(() => _busyTour = null);
+      if (mounted) { setState(() => _busyTour = null); }
     }
   }
 
