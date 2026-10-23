@@ -15,6 +15,7 @@ import 'filtering.dart';
 import 'library_repository.dart';
 import 'scan_display.dart';
 import '../cleanup/cleanup_screen.dart';
+import '../cleanup/property_tours_view.dart';
 import '../cleanup/cleanup_controller.dart';
 import '../cleanup/scan_result_archive.dart';
 import '../dashboard/scan_dashboard.dart';
@@ -126,6 +127,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         _cleanup.similar.expand((group) => group),
       CleanupCategory.blurry => _cleanup.blurry,
       CleanupCategory.noPeople => _cleanup.noPeople,
+      CleanupCategory.accidental => _cleanup.accidentalScreenshots,
+      CleanupCategory.propertyTours => const <String>[],
     };
     unawaited(_cleanup.restorePhotoReferences(ids));
   }
@@ -451,6 +454,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       CleanupCategory.similar => _cleanup.similarCount,
       CleanupCategory.blurry => _cleanup.blurry.length,
       CleanupCategory.noPeople => _cleanup.noPeople.length,
+      CleanupCategory.accidental => _cleanup.accidentalScreenshots.length,
+      CleanupCategory.propertyTours => _cleanup.propertyTours.length,
     };
     return Padding(
       padding: EdgeInsets.fromLTRB(indent ? 22 : 8, 2, 8, 2),
@@ -464,9 +469,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           overflow: TextOverflow.ellipsis),
         // Category results may still be accumulating. Display the current
         // numeric count, even when zero; only the scan control animates.
-        trailing: Text(category == CleanupCategory.noPeople &&
+        trailing: Text((category == CleanupCategory.noPeople &&
                 (_cleanup.result?.peopleDetectionAvailable != true ||
-                    !_cleanup.analyzingPeople)
+                    !_cleanup.analyzingPeople)) ||
+                ((category == CleanupCategory.accidental ||
+                    category == CleanupCategory.propertyTours) &&
+                    _cleanup.result?.smartAnalyzed != true)
             ? '—' : '$count',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         onTap: _deleting ? null :
@@ -1026,6 +1034,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
               )
             : _activityView
             ? const DeletionActivityView()
+            : _cleanupCategory == CleanupCategory.propertyTours
+            ? PropertyToursView(tours: _cleanup.propertyTours)
             : _cleanupCategory != null
             ? CleanupWorkspace(
                 controller: _cleanup,
