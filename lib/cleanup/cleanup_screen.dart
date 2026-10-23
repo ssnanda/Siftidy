@@ -17,7 +17,7 @@ extension CleanupCategoryLabel on CleanupCategory {
         CleanupCategory.exact => 'Exact duplicates',
         CleanupCategory.similar => 'Similar photos',
         CleanupCategory.blurry => 'Possibly blurry',
-        CleanupCategory.noPeople => 'No people detected',
+        CleanupCategory.noPeople => 'Scenes & objects',
       };
 
   IconData get icon => switch (this) {
@@ -529,8 +529,11 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                   ? Colors.red
                   : Theme.of(context).colorScheme.primary)),
           if (widget.category == CleanupCategory.noPeople &&
-              !controller.analyzingPeople)
-            const Text('Enable Analyze people to populate this category.',
+              (!controller.analyzingPeople ||
+                  result?.peopleDetectionAvailable != true))
+            const Text('Scenes & objects were not analyzed in this scan. '
+              'Enable people/scene analysis in Scan settings and rescan. '
+              'A zero count does not mean every photo contains people.',
               style: TextStyle(fontSize: 12)),
           if (allCount > 0) ...[
             const SizedBox(height: 5),
