@@ -20,6 +20,8 @@ class ScanRow {
       'l': base64Encode(photo!.fingerprint.spatialLuma),
       'hash': photo!.sha256, 'people': photo!.hasPeople,
       'ss': photo!.isScreenshot,
+      't': photo!.createdAtMs, 'lat': photo!.latitude,
+      'lon': photo!.longitude, 'acc': photo!.accidentalReason,
     }
   };
   factory ScanRow.fromJson(Map<String, dynamic> d) {
@@ -38,6 +40,10 @@ class ScanRow {
         sha256: p['hash'] as String?,
         hasPeople: p['people'] as bool?,
         isScreenshot: p['ss'] == true,
+        createdAtMs: (p['t'] as num?)?.toInt() ?? 0,
+        latitude: (p['lat'] as num?)?.toDouble(),
+        longitude: (p['lon'] as num?)?.toDouble(),
+        accidentalReason: p['acc'] as String?,
       );
     }
     return ScanRow(id, (d['y'] as num).toInt(),
