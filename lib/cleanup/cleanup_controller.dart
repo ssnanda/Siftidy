@@ -324,6 +324,48 @@ class CleanupController extends ChangeNotifier {
     }
   }
 
+  /// Rehydrate only photos the user wants to review. Completed scan results
+  /// are available immediately from saved grouping IDs; thumbnails are fetched
+  /// lazily rather than reprocessing the entire Photos library on launch.
+  Future<void> restorePhotoReferences(Iterable<String> identifiers) async {
+    if (busy || _disposed) return;
+    var currentResult = result;
+    if (currentResult == null) return;
+    final generation = _scanGeneration;
+    final missing = identifiers.toSet()
+        .difference(currentResult.photos.keys.toSet()).toList();
+    for (var offset = 0; offset < missing.length; offset += 24) {
+      if (_disposed || busy || generation != _scanGeneration ||
+          result != currentResult) return;
+      final batch = missing.skip(offset).take(24).toList();
+      final retrieved = await Future.wait(batch.map((id) async {
+        try {
+          return await AssetEntity.fromId(id);
+        } catch (_) {
+          return null;
+        }
+      }));
+      if (_disposed || busy || generation != _scanGeneration ||
+          result != currentResult) return;
+      final updated = Map<String, AssetEntity>.of(currentResult.photos);
+      for (var i = 0; i < batch.length; i++) {
+        final asset = retrieved[i];
+        if (asset != null) updated[batch[i]] = asset;
+      }
+      currentResult = CleanupScanResult(
+        photos: updated,
+        groups: currentResult.groups,
+        total: currentResult.total,
+        visited: currentResult.visited,
+        skipped: currentResult.skipped,
+        peopleDetectionAvailable: currentResult.peopleDetectionAvailable,
+        years: currentResult.years,
+      );
+      result = currentResult;
+      _notify();
+    }
+  }
+
   /// Stop new work, finish the current in-flight batch, and safely flush its
   /// checkpoint. Called by the macOS menu bar before explicit full quit.
   /// Native macOS has its own 20-second deadline and forced-exit fallback.
