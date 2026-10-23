@@ -15,6 +15,7 @@ class ScanResultSnapshot {
     required this.groups,
     required this.bytes,
     this.peopleAnalyzed,
+    this.smartAnalyzed = false,
   });
 
   final String id;
@@ -23,6 +24,7 @@ class ScanResultSnapshot {
   final CleanupGroups groups;
   /// Null for older snapshots; unknown is not a confirmed zero.
   final bool? peopleAnalyzed;
+  final bool smartAnalyzed;
   String get scenesCountLabel => peopleAnalyzed == true || noPeopleCount > 0
       ? '$noPeopleCount' : '—';
 
@@ -40,6 +42,15 @@ class ScanResultSnapshot {
     'saved': savedAt.toIso8601String(),
     'total': total, 'analyzed': analyzed,
     'peopleAnalyzed': peopleAnalyzed,
+    'smartAnalyzed': smartAnalyzed,
+    'accidental': groups.accidentalScreenshots,
+    'accidentalReasons': groups.accidentalReasons,
+    'propertyTours': [
+      for (final tour in groups.propertyTours) {
+        'ids': tour.ids, 'start': tour.startedAtMs,
+        'lat': tour.latitude, 'lon': tour.longitude,
+      }
+    ],
     'exact': groups.exact, 'similar': groups.similar,
     'blurry': groups.blurry, 'noPeople': groups.noPeople,
   };
@@ -58,10 +69,24 @@ class ScanResultSnapshot {
       analyzed: (data['analyzed'] as num).toInt(),
       bytes: bytes,
       peopleAnalyzed: data['peopleAnalyzed'] as bool?,
+      smartAnalyzed: data['smartAnalyzed'] == true,
       groups: CleanupGroups(
         exact: lists('exact'), similar: lists('similar'),
         blurry: List<String>.from(data['blurry'] as List? ?? const []),
         noPeople: List<String>.from(data['noPeople'] as List? ?? const []),
+        accidentalScreenshots: List<String>.from(
+            data['accidental'] as List? ?? const []),
+        accidentalReasons: Map<String, String>.from(
+            data['accidentalReasons'] as Map? ?? const {}),
+        propertyTours: [
+          for (final item in data['propertyTours'] as List? ?? const [])
+            PropertyTourSuggestion(
+              ids: List<String>.from((item as Map)['ids'] as List),
+              startedAtMs: ((item)['start'] as num).toInt(),
+              latitude: (item['lat'] as num?)?.toDouble(),
+              longitude: (item['lon'] as num?)?.toDouble(),
+            ),
+        ],
       ),
     );
   }
@@ -85,6 +110,7 @@ class ScanResultArchive {
     required int analyzed,
     required CleanupGroups groups,
     bool peopleAnalyzed = false,
+    bool smartAnalyzed = false,
   }) async {
     await folder.create(recursive: true);
     final id = 'scan-${started.microsecondsSinceEpoch}';
@@ -92,6 +118,7 @@ class ScanResultArchive {
       id: id, startedAt: started, savedAt: DateTime.now(),
       total: total, analyzed: analyzed, groups: groups, bytes: 0,
       peopleAnalyzed: peopleAnalyzed,
+      smartAnalyzed: smartAnalyzed,
     );
     final target = _file(id);
     final temporary = File('${target.path}.tmp');
@@ -104,6 +131,7 @@ class ScanResultArchive {
       savedAt: provisional.savedAt, total: total,
       analyzed: analyzed, groups: groups, bytes: size,
       peopleAnalyzed: peopleAnalyzed,
+      smartAnalyzed: smartAnalyzed,
     );
   }
 
