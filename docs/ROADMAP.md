@@ -46,6 +46,8 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
 
 Deliver useful day-to-day ways to sort and organize media and review obvious clutter. Favor understandable, review-first workflows and user control over ambitious automatic recommendations.
 
+**New priority:** [Accidental Screenshot Review and Property Tours](SMART_CATEGORIES.md). Offer conservative lock-screen/blank/repeated-capture screenshot suggestions with Keep/Not accidental. Suggest property-photo sessions only after at least five consecutive related photos plus time/location and visual evidence; let the user verify each tour, assign/edit address, and categorize listing/move-in/move-out. Never silently reverse-geocode private photo coordinates or auto-delete. The existing Scenes & objects category must explicitly distinguish not-analyzed results from confirmed zero matches.
+
 ## 0.4 — Advanced bulk cleanup and intelligent recommendations
 
 Improve visual similarity accuracy, false-positive handling, content-aware suggestions and bulk review. Any suggested deletion must remain subject to user review.
