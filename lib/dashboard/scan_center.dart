@@ -8,97 +8,6 @@ import '../cleanup/cleanup_screen.dart';
 import '../cleanup/scan_result_archive.dart';
 import 'scan_dashboard.dart';
 
-/// Dedicated scan operations page. The dashboard deliberately excludes
-/// advanced tuning controls and destructive cache actions.
-class ScanCenterHome extends StatelessWidget {
-  const ScanCenterHome({
-    super.key, required this.controller, required this.onBack,
-    required this.onStart, required this.onSettings,
-    required this.onPause, required this.onStop,
-    required this.onReview, required this.onOpenSnapshot,
-  });
-
-  final CleanupController controller;
-  final VoidCallback onBack, onStart, onSettings, onPause, onStop;
-  final ValueChanged<CleanupCategory> onReview;
-  final ValueChanged<ScanResultSnapshot> onOpenSnapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = (controller.fraction * 100).round();
-    final current = controller.checkpointStore?.current;
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      Row(children: [
-        IconButton(onPressed: onBack, tooltip: 'Dashboard',
-          icon: const Icon(Icons.arrow_back)),
-        const SizedBox(width: 7),
-        Expanded(child: Text('Scan Center', style:
-            Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w700))),
-        OutlinedButton.icon(onPressed: onSettings,
-          icon: const Icon(Icons.settings_outlined),
-          label: const Text('Scan settings')),
-      ]),
-      const SizedBox(height: 16),
-      Card(child: Padding(padding: const EdgeInsets.all(20), child:
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text(controller.paused ? 'Paused'
-                  : controller.running ? 'Scanning'
-                  : controller.completed ? 'Completed' : 'Ready',
-              style: Theme.of(context).textTheme.titleLarge)),
-            Text('$progress%', style: Theme.of(context)
-                .textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-          ]),
-          const SizedBox(height: 10),
-          LinearProgressIndicator(value: controller.fraction,
-            minHeight: 8, borderRadius: BorderRadius.circular(6)),
-          const SizedBox(height: 11),
-          Text('${controller.visited} / ${controller.total} scanned · '
-              '${controller.analyzedCount} analyzed'),
-          const SizedBox(height: 5),
-          Text(controller.scanPhase),
-          if (current != null) ...[
-            const SizedBox(height: 6),
-            Text('Elapsed: ${scanDuration(current.elapsedMs)} · '
-                'Rate: ${current.perMinute.toStringAsFixed(0)} photos/min · '
-                'Skipped: ${current.skipped}'),
-          ],
-          if (controller.error != null) ...[
-            const SizedBox(height: 6),
-            Text(controller.error!, style: TextStyle(
-              color: Theme.of(context).colorScheme.error)),
-          ],
-          const SizedBox(height: 14),
-          Wrap(spacing: 9, runSpacing: 8, children: [
-            FilledButton.icon(
-              onPressed: controller.running
-                  ? (controller.paused ? onPause : null) : onStart,
-              icon: Icon(controller.paused ? Icons.play_arrow
-                  : Icons.play_circle_outline),
-              label: Text(controller.paused ? 'Resume' : 'Scan now')),
-            if (controller.running && !controller.paused)
-              OutlinedButton.icon(onPressed: onPause,
-                icon: const Icon(Icons.pause), label: const Text('Pause')),
-            if (controller.running)
-              TextButton(onPressed: onStop, child: const Text('Stop')),
-            if (controller.completed)
-              TextButton.icon(
-                onPressed: () => onReview(CleanupCategory.exact),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Review results')),
-          ]),
-        ]),
-      )),
-      const SizedBox(height: 24),
-      RecentScanRuns(controller: controller, limit: 30,
-          onOpen: onOpenSnapshot, onViewAll: onBack),
-      const SizedBox(height: 18),
-      _StoragePanel(controller: controller),
-    ]);
-  }
-}
-
 class ScanSettingsHome extends StatelessWidget {
   const ScanSettingsHome({
     super.key, required this.controller, required this.onBack,
@@ -112,7 +21,7 @@ class ScanSettingsHome extends StatelessWidget {
     return ListView(padding: const EdgeInsets.all(26), children: [
       Row(children: [
         IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back),
-          tooltip: 'Scan Center'),
+          tooltip: 'Dashboard'),
         const SizedBox(width: 8),
         Text('Scan settings', style: Theme.of(context)
             .textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -201,47 +110,6 @@ class ScanSettingsHome extends StatelessWidget {
           'menu bar. Quit Completely offers Pause & Quit to save a checkpoint. '
           'Deleting saved history never deletes Apple Photos.'))),
     ]);
-  }
-}
-
-class _StoragePanel extends StatefulWidget {
-  const _StoragePanel({required this.controller});
-  final CleanupController controller;
-  @override
-  State<_StoragePanel> createState() => _StoragePanelState();
-}
-
-class _StoragePanelState extends State<_StoragePanel> {
-  @override
-  Widget build(BuildContext context) {
-    final store = widget.controller.checkpointStore;
-    if (store == null) return const SizedBox.shrink();
-    return FutureBuilder(
-      future: store.usage(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Card(child: Padding(padding: EdgeInsets.all(12),
-            child: Text('Measuring scan storage…')));
-        }
-        final usage = snapshot.data!;
-        return Card(child: Padding(padding: const EdgeInsets.all(18),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Local scan storage', style:
-                Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            SelectableText(usage.folder),
-            const SizedBox(height: 8),
-            Text('Resumable checkpoint: '
-              '${scanFileSize(usage.activeBytes)} · '
-              'History: ${scanFileSize(usage.historyBytes)} · '
-              'Total (including snapshots): ${scanFileSize(usage.totalBytes)}'),
-            const SizedBox(height: 8),
-            const Text('Stored locally. Saved result snapshots can be '
-              'deleted individually above; originals are never included.'),
-          ]),
-        ));
-      },
-    );
   }
 }
 
