@@ -347,7 +347,7 @@ class _RecentScanRunsState extends State<RecentScanRuns> {
                         icon: const Icon(Icons.delete_outline)),
                     ]),
                   ),
-                ));
+                );
               }),
           ]);
         },
