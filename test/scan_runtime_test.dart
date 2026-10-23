@@ -13,7 +13,7 @@ void main() {
     expect(ScanMode.minimal.concurrency, 1);
     expect(ScanMode.eco.concurrency, 1);
     expect(ScanMode.balanced.concurrency, 2);
-    expect(ScanMode.turbo.concurrency, 4);
+    expect(ScanMode.turbo.concurrency, 6);
     expect(ScanMode.minimal.targetCpu, lessThan(ScanMode.eco.targetCpu));
     runtime.dispose();
   });
