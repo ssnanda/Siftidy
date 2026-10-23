@@ -214,7 +214,10 @@ CleanupGroups classifyPhotos(List<ScannedPhoto> photos) {
       }
     }
     var assigned = false;
-    for (final clusterIndex in possible) {
+    // Compare representatives in stable order so exact duplicates do not
+    // arbitrarily replace the group's original keeper after a rescan.
+    final orderedCandidates = possible.toList()..sort();
+    for (final clusterIndex in orderedCandidates) {
       final group = clusters[clusterIndex];
       final representative = group.first;
       // Do not use a blank-looking screenshot to anchor an unrelated group.
