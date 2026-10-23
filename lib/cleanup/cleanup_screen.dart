@@ -535,6 +535,11 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
               _message!.contains('failed') || _message!.contains('Unable')
                   ? Colors.red
                   : Theme.of(context).colorScheme.primary)),
+          if (widget.category == CleanupCategory.accidental &&
+              result?.smartAnalyzed != true)
+            const Text('These suggestions require a new v0.3 smart scan. '
+              'Older scan results did not analyze accidental screenshots.',
+              style: TextStyle(fontSize: 12)),
           if (widget.category == CleanupCategory.noPeople &&
               (!controller.analyzingPeople ||
                   result?.peopleDetectionAvailable != true))
@@ -750,6 +755,25 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
           if (photo.isFavorite)
             const Positioned(bottom: 5, left: 5,
               child: Icon(Icons.favorite, color: Color(0xFFE94E70))),
+          if (widget.category == CleanupCategory.accidental)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: Container(color: Colors.black87,
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(widget.controller.result?.groups
+                          .accidentalReasons[photo.id] ?? 'Review suggestion',
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                  TextButton(
+                    onPressed: () {
+                      widget.controller.dismissAccidental(photo.id);
+                    },
+                    child: const Text('Not accidental',
+                      style: TextStyle(color: Colors.white)),
+                  ),
+                ]),
+              ),
+            ),
         ])),
     );
   }
