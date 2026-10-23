@@ -178,7 +178,7 @@ class CleanupScanner {
                   .timeout(const Duration(seconds: 8));
               if (yes == true) {
                 evidence++;
-                if (evidence >= 2) return true;
+                if (evidence >= 2) { return true; }
               }
             } catch (_) {
               // Missing/unavailable image evidence is not a positive.
@@ -197,7 +197,7 @@ class CleanupScanner {
           final batch = candidateTours.skip(start).take(parallelTours).toList();
           final matches = await Future.wait(batch.map(verifyTour));
           for (var i = 0; i < batch.length; i++) {
-            if (matches[i]) confirmedTours.add(batch[i]);
+            if (matches[i]) { confirmedTours.add(batch[i]); }
           }
         }
         if (!cancelled()) {
@@ -235,7 +235,7 @@ class CleanupScanner {
     /// an additional 640px PhotoKit read/OCR ran for *every* screenshot.
     Future<List<_ThumbnailAnalysis>> analyzeBatch(
         List<AssetEntity> photos, {required bool screenshot}) async {
-      if (photos.isEmpty) return const [];
+      if (photos.isEmpty) { return const []; }
       reportPhase(screenshot ? 'Analyzing screenshot thumbnails'
           : 'Analyzing photo thumbnails');
       final thumbnails = await Future.wait(photos.map((asset) async {
