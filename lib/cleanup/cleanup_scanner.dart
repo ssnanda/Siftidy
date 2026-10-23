@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +19,9 @@ class CleanupScanResult {
     required this.skipped,
     required this.peopleDetectionAvailable,
     required this.years,
+    this.restoring = false,
+    this.restoredIndexed = 0,
+    this.restoredTotal = 0,
   });
 
   final Map<String, AssetEntity> photos;
@@ -26,6 +31,11 @@ class CleanupScanResult {
   final int skipped;
   final bool peopleDetectionAvailable;
   final Set<int> years;
+  /// Rebuilding in-memory asset references from the saved analysis journal.
+  /// Previously analyzed assets must never be re-decoded in this phase.
+  final bool restoring;
+  final int restoredIndexed;
+  final int restoredTotal;
 }
 
 class _ThumbnailAnalysis {
@@ -39,12 +49,16 @@ class _ThumbnailAnalysis {
 /// The runtime paces each batch while Eco/Minimal is active.
 class CleanupScanner {
   static const _vision = MethodChannel('siftidy/vision');
-  static const _pageSize = 64;
+  // Use fewer PhotoKit round trips while rebuilding many cached IDs.
+  static const _pageSize = 256;
+  // Classifying all cached photos every page can stall a resumed scan.
+  static const _classifyAfterNewPhotos = 256;
 
   Future<CleanupScanResult> scan({
     required bool Function() cancelled,
     required Future<void> Function() waitIfPaused,
     required void Function(CleanupScanResult snapshot) onProgress,
+    required void Function(String phase) onPhase,
     required ScanRuntime performance,
     required ScanCheckpointStore checkpointStore,
     Set<String> protectedIds = const {},
@@ -71,10 +85,28 @@ class CleanupScanner {
     var skipped = checkpoint.skipped;
     var visited = restored.length;
     var peopleAvailable = analyzePeople;
+    String lastPhase = '';
+    void reportPhase(String phase) {
+      if (phase != lastPhase && !cancelled()) {
+        lastPhase = phase;
+        onPhase(phase);
+      }
+    }
+    reportPhase(restored.isEmpty ? 'Preparing Photos scan'
+        : 'Restoring saved photo references');
+    var restoredIndexed = 0;
+    var freshAnalyzedSinceClassification = 0;
+    var hasReachedUncachedPhoto = restored.isEmpty;
+    var groups = const CleanupGroups(
+      exact: [], similar: [], blurry: [], noPeople: [],
+    );
 
-    CleanupScanResult snapshot(CleanupGroups groups) => CleanupScanResult(
+    CleanupScanResult snapshot(CleanupGroups latestGroups) => CleanupScanResult(
       photos: Map<String, AssetEntity>.of(assets),
-      groups: groups,
+      groups: latestGroups,
+      restoring: !hasReachedUncachedPhoto && restoredIndexed < restored.length,
+      restoredIndexed: restoredIndexed,
+      restoredTotal: restored.length,
       total: total,
       visited: visited,
       skipped: skipped,
@@ -82,18 +114,34 @@ class CleanupScanner {
       years: Set<int>.of(years),
     );
 
-    Future<void> publish() async {
-      if (cancelled()) return;
+    Future<void> publish({
+      bool finalPass = false,
+      bool checkpointOnly = false,
+    }) async {
+      // A quit/cancel must still commit the current page's completed work.
+      if (cancelled() && !checkpointOnly) return;
       final now = DateTime.now();
       final elapsed = now.difference(lastSavedAt).inMilliseconds;
       lastSavedAt = now;
-      await checkpointStore.append(List<ScanRow>.of(pending),
-        mode: performance.activeMode.name,
-        elapsedMs: elapsed,
-        cpu: performance.processCpu, ram: performance.ramMb);
-      pending.clear();
-      if (cancelled()) return;
-      final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
+      if (pending.isNotEmpty || elapsed >= 1000) {
+        await checkpointStore.append(List<ScanRow>.of(pending),
+          mode: performance.activeMode.name,
+          elapsedMs: elapsed,
+          cpu: performance.processCpu, ram: performance.ramMb);
+        pending.clear();
+      }
+      if (checkpointOnly || cancelled()) return;
+      // Restoration can touch 25,000+ cached photos. Repeating classification
+      // for each page makes that phase appear frozen for minutes.
+      if (finalPass ||
+          freshAnalyzedSinceClassification >= _classifyAfterNewPhotos) {
+        reportPhase('Updating cleanup suggestions');
+        groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned))
+            .timeout(const Duration(seconds: 30),
+                onTimeout: () => throw TimeoutException(
+                    'Cleanup grouping exceeded 30 seconds.'));
+        freshAnalyzedSinceClassification = 0;
+      }
       if (!cancelled()) onProgress(snapshot(groups));
     }
 
@@ -101,11 +149,16 @@ class CleanupScanner {
       if (hashes.containsKey(asset.id)) return hashes[asset.id];
       String? hash;
       try {
-        final file = await asset.originFile;
+        reportPhase('Verifying exact duplicates');
+        await waitIfPaused();
+        if (cancelled()) return null;
+        final file = await asset.originFile
+            .timeout(const Duration(seconds: 12));
         if (file != null) {
           // Crypto's chunked conversion reads the ENTIRE file, not the first
           // chunk, before comparing exact duplicates.
-          hash = (await sha256.bind(file.openRead()).first).toString();
+          hash = (await sha256.bind(file.openRead()).first
+              .timeout(const Duration(seconds: 12))).toString();
         }
       } catch (_) {
         // Unavailable originals are not treated as verified duplicates.
@@ -115,20 +168,26 @@ class CleanupScanner {
     }
 
     Future<_ThumbnailAnalysis> analyze(AssetEntity asset) async {
+      await waitIfPaused();
       await performance.pace(cancelled: cancelled);
       if (cancelled()) return const _ThumbnailAnalysis(null, null);
+      reportPhase('Analyzing new photos');
       final bytes = await asset.thumbnailDataWithSize(
         const ThumbnailSize(192, 192),
         format: ThumbnailFormat.jpeg,
         quality: 80,
-      );
-      if (bytes == null) return const _ThumbnailAnalysis(null, null);
-      final fingerprint = await compute(fingerprintThumbnail, bytes);
+      ).timeout(const Duration(seconds: 20));
+      if (bytes == null || cancelled()) {
+        return const _ThumbnailAnalysis(null, null);
+      }
+      final fingerprint = await compute(fingerprintThumbnail, bytes)
+          .timeout(const Duration(seconds: 20));
       if (fingerprint == null) return const _ThumbnailAnalysis(null, null);
       bool? people;
       if (analyzePeople && peopleAvailable) {
         try {
-          people = await _vision.invokeMethod<bool>('hasPeople', bytes);
+          people = await _vision.invokeMethod<bool>('hasPeople', bytes)
+              .timeout(const Duration(seconds: 15));
         } on MissingPluginException {
           peopleAvailable = false;
         } on PlatformException {
@@ -142,7 +201,11 @@ class CleanupScanner {
       for (var page = 0; !cancelled(); page++) {
         await waitIfPaused();
         if (cancelled()) break;
-        final batch = await path.getAssetListPaged(page: page, size: _pageSize);
+        reportPhase('Reading Photos library');
+        final batch = await path.getAssetListPaged(page: page, size: _pageSize)
+            .timeout(const Duration(seconds: 30),
+                onTimeout: () => throw TimeoutException(
+                    'Photos library page $page did not respond within 30s'));
         if (batch.isEmpty) break;
         var cursor = 0;
         while (cursor < batch.length && !cancelled()) {
@@ -158,6 +221,11 @@ class CleanupScanner {
             if (!visitedIds.add(asset.id)) continue;
             final cached = restored[asset.id];
             if (cached != null) {
+              restoredIndexed++;
+              if (restoredIndexed % 512 == 0) {
+                reportPhase('Restoring saved photos: $restoredIndexed'
+                    ' / ${restored.length}');
+              }
               years.add(cached.year);
               if (cached.photo != null &&
                   !protectedIds.contains(asset.id) &&
@@ -173,6 +241,7 @@ class CleanupScanner {
               }
               continue;
             }
+            hasReachedUncachedPhoto = true;
             visited++;
             final y = asset.createDateTime.year;
             years.add(y);
@@ -237,6 +306,7 @@ class CleanupScanner {
               isScreenshot: isScreenshot,
             );
             scanned.add(analyzedPhoto);
+            freshAnalyzedSinceClassification++;
             assets[asset.id] = asset;
             pending.add(ScanRow(asset.id, asset.createDateTime.year,
               asset.width, asset.height, photo: analyzedPhoto));
@@ -247,10 +317,11 @@ class CleanupScanner {
       }
     }
 
-    if (album != null) {
-      final collections = await PhotoManager.getAssetPathList(
-        hasAll: true, type: RequestType.image,
-      );
+    try {
+      if (album != null) {
+        final collections = await PhotoManager.getAssetPathList(
+          hasAll: true, type: RequestType.image,
+        );
       final screenshots = LibraryRepository.smartAlbum(
         collections,
         PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
@@ -258,17 +329,24 @@ class CleanupScanner {
       if (screenshots != null && screenshots.id != album.id) {
         await index(screenshots, isScreenshot: true);
       }
-      if (!cancelled()) await index(album);
-    }
-    if (!cancelled()) {
-      await publish();
-      if (!cancelled()) {
-        await checkpointStore.reconcile(visitedIds, total);
-        visited = checkpointStore.current?.visited ?? visited;
-        skipped = checkpointStore.current?.skipped ?? skipped;
+        if (!cancelled()) await index(album);
       }
+      if (!cancelled()) {
+        await publish(finalPass: true);
+        if (!cancelled()) {
+          await checkpointStore.reconcile(visitedIds, total);
+          visited = checkpointStore.current?.visited ?? visited;
+          skipped = checkpointStore.current?.skipped ?? skipped;
+        }
+      }
+      return snapshot(groups);
+    } finally {
+      // Graceful shutdown bypasses classification and safely flushes any
+      // analyzed photos from an interrupted page before we acknowledge quit.
+      if (pending.isNotEmpty) {
+        await publish(checkpointOnly: true);
+      }
+      await checkpointStore.flush();
     }
-    final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
-    return snapshot(groups);
   }
 }

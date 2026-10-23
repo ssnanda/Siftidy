@@ -47,6 +47,9 @@ class ScanProgress {
     this.eta,
     this.elapsedMs = 0,
     this.photosPerMinute = 0,
+    this.restoring = false,
+    this.restoredIndexed = 0,
+    this.restoredTotal = 0,
   });
   final int visited;
   final int total;
@@ -57,6 +60,9 @@ class ScanProgress {
   final Duration? eta;
   final int elapsedMs;
   final double photosPerMinute;
+  final bool restoring;
+  final int restoredIndexed;
+  final int restoredTotal;
 }
 
 /// Platform feedback for responsible scanning, not an OS-enforced CPU quota.
@@ -91,6 +97,7 @@ class ScanRuntime extends ChangeNotifier {
   Timer? _poller;
   ScanProgress Function()? progress;
   void Function(String action)? handleAction;
+  Future<void> Function()? prepareQuit;
 
   Future<void> initialize() => _initialization ??= _initializeOnce();
 
@@ -136,14 +143,25 @@ class ScanRuntime extends ChangeNotifier {
   Future<void> attach({
     required ScanProgress Function() readProgress,
     required void Function(String action) onAction,
+    required Future<void> Function() onPrepareQuit,
   }) async {
     progress = readProgress;
     handleAction = onAction;
+    prepareQuit = onPrepareQuit;
     _attached = true;
     _menu.setMethodCallHandler((call) async {
       if (_closed) return;
       if (call.method != 'action') return;
       final action = call.arguments?.toString() ?? '';
+      if (action == 'prepareQuit') {
+        final save = prepareQuit;
+        if (save == null) {
+          throw PlatformException(code: 'NO_QUIT_HANDLER',
+              message: 'Scan save handler is not available');
+        }
+        await save();
+        return;
+      }
       if (action == 'toggleIdleTurbo') {
         await setAutoTurboOnIdle(!autoTurboOnIdle);
       } else if (action.startsWith('mode:')) {
@@ -262,6 +280,9 @@ class ScanRuntime extends ChangeNotifier {
         'etaSeconds': p.eta?.inSeconds,
         'elapsedMs': p.elapsedMs,
         'ratePerMinute': p.photosPerMinute,
+        'restoring': p.restoring,
+        'restoredIndexed': p.restoredIndexed,
+        'restoredTotal': p.restoredTotal,
         'baseMode': baseMode.name,
         'activeMode': activeMode.name,
         'turboSecondsRemaining': manualTurboRemaining?.inSeconds,

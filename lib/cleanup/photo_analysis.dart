@@ -191,10 +191,27 @@ CleanupGroups classifyPhotos(List<ScannedPhoto> photos) {
   // to avoid O(n^2) comparisons across large Photos libraries.
   final clusters = <List<ScannedPhoto>>[];
   final candidates = <int, List<int>>{};
+  // An image with common/blank row hashes may share buckets with tens of
+  // thousands of unrelated screenshots. An unbounded candidate union can
+  // turn restoring 26k saved photos into an enormous CPU-heavy operation.
+  // Prefer a bounded number of nearby and early representatives. Missing a
+  // remote lookalike is safer than freezing a background cleanup scan.
+  const recentCandidatesPerRow = 16;
+  const earliestCandidatesPerRow = 4;
   for (final item in photos) {
     final possible = <int>{};
     for (var row = 0; row < 8; row++) {
-      possible.addAll(candidates[row * 256 + item.fingerprint.rows[row]] ?? const []);
+      final bucket = candidates[row * 256 + item.fingerprint.rows[row]];
+      if (bucket == null) { continue; }
+      for (var i = bucket.length - 1;
+          i >= 0 && i >= bucket.length - recentCandidatesPerRow;
+          i--) {
+        possible.add(bucket[i]);
+      }
+      final earliest = math.min(earliestCandidatesPerRow, bucket.length);
+      for (var i = 0; i < earliest; i++) {
+        possible.add(bucket[i]);
+      }
     }
     var assigned = false;
     for (final clusterIndex in possible) {

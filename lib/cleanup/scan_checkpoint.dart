@@ -197,6 +197,9 @@ class ScanCheckpointStore {
     await _writeState(scan);
   }
 
+  /// Wait until every committed batch is flushed before terminating the app.
+  Future<void> flush() => _pendingAppend;
+
   Future<void> finish(String status) async {
     // Final reports and explicit discard wait for the in-flight journal
     // flush; they must never race its metadata update.

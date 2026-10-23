@@ -512,6 +512,11 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                         : 'Scan stopped or not started.',
             style: const TextStyle(fontSize: 12),
           )),
+          if (controller.running)
+            Text(controller.paused
+                ? 'Paused · safe to resume, stop, or quit'
+                : 'Working: ${controller.scanPhase}',
+              style: const TextStyle(fontSize: 12)),
           if (controller.resumeStatus != null)
             Text(controller.resumeStatus!,
               style: TextStyle(fontSize: 12,

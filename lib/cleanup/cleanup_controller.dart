@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,6 +26,10 @@ class CleanupController extends ChangeNotifier {
   }
   int _baselineVisited = 0;
   Future<void> _discardPending = Future<void>.value();
+  Completer<void>? _scanFinished;
+  Future<void>? _preparingQuit;
+  Completer<void>? _resumeSignal;
+  String scanPhase = 'Idle';
   static const _autoKey = 'cleanup_auto_scan_v02';
 
   CleanupScanResult? result;
@@ -155,7 +161,9 @@ class CleanupController extends ChangeNotifier {
             checkpointStore?.current?.people == analyzingPeople
         ? checkpointStore?.current?.visited ?? 0 : 0;
     running = true;
+    _scanFinished = Completer<void>();
     paused = false;
+    scanPhase = _baselineVisited > 0 ? 'Restoring saved scan' : 'Preparing scan';
     completed = false;
     error = null;
     if (_baselineVisited == 0) {
@@ -173,9 +181,12 @@ class CleanupController extends ChangeNotifier {
     try {
       final finalResult = await _scanner.scan(
         cancelled: () => _cancel || _disposed || generation != _scanGeneration,
-        waitIfPaused: () async {
-          while (paused && !_cancel && !_disposed && generation == _scanGeneration) {
-            await Future<void>.delayed(const Duration(milliseconds: 200));
+        waitIfPaused: waitWhilePaused,
+        onPhase: (phase) {
+          if (!_disposed && !_cancel && generation == _scanGeneration &&
+              scanPhase != phase) {
+            scanPhase = phase;
+            _notify();
           }
         },
         performance: performance,
@@ -186,6 +197,13 @@ class CleanupController extends ChangeNotifier {
         onProgress: (snapshot) {
           if (_disposed || _cancel || generation != _scanGeneration) return;
           result = snapshot;
+          if (snapshot.restoring) {
+            resumeStatus = 'Restoring saved analysis: '
+                '${snapshot.restoredIndexed} / ${snapshot.restoredTotal} '
+                'photos located. No thumbnails reanalyzed.';
+          } else if (snapshot.restoredTotal > 0) {
+            resumeStatus = null;
+          }
           final elapsed = DateTime.now().difference(_startedAt!);
           // Show a measured ETA only after a meaningful sample. No fake ETA.
           final added = snapshot.visited - _baselineVisited;
@@ -212,20 +230,77 @@ class CleanupController extends ChangeNotifier {
       if (!_disposed && generation == _scanGeneration) {
         running = false;
         paused = false;
+        scanPhase = error == null
+            ? (completed ? 'Completed' : 'Stopped, checkpoint saved')
+            : 'Scan interrupted: $error';
+        _releasePausedWorker();
         _notify();
       }
+      final completion = _scanFinished;
+      _scanFinished = null;
+      if (completion != null && !completion.isCompleted) {
+        completion.complete();
+      }
+    }
+  }
+
+  /// Stop new work, finish the current in-flight batch, and safely flush its
+  /// checkpoint. Called by the macOS menu bar before explicit full quit.
+  /// Native macOS has its own 20-second deadline and forced-exit fallback.
+  Future<void> pauseAndSaveForQuit() =>
+      _preparingQuit ??= _pauseAndSaveForQuit();
+
+  Future<void> _pauseAndSaveForQuit() async {
+    await initialize();
+    _cancel = true;
+    paused = false;
+    _releasePausedWorker();
+    scanPhase = 'Saving checkpoint before quit';
+    resumeStatus = 'Stopping scan and saving checkpoint before quit…';
+    _notify();
+    await _scanFinished?.future;
+    await _discardPending;
+    await checkpointStore?.flush();
+    if (checkpointStore?.current != null) {
+      await checkpointStore!.finish('paused');
+    }
+  }
+
+  /// Pause at the next safe scanner boundary, then unblock immediately on
+  /// Resume. A completer prevents repeated 200ms polling and missed toggles.
+  Future<void> waitWhilePaused() async {
+    while (paused && !_cancel && !_disposed) {
+      _resumeSignal ??= Completer<void>();
+      await _resumeSignal!.future;
+    }
+  }
+
+  void _releasePausedWorker() {
+    final waiting = _resumeSignal;
+    _resumeSignal = null;
+    if (waiting != null && !waiting.isCompleted) {
+      waiting.complete();
     }
   }
 
   void pauseOrResume() {
     if (!running) return;
     paused = !paused;
+    if (paused) {
+      _resumeSignal ??= Completer<void>();
+      scanPhase = 'Pausing after current photo operation';
+    } else {
+      _releasePausedWorker();
+      scanPhase = 'Resuming scan';
+    }
     _notify();
   }
 
   void stop() {
     _cancel = true;
     paused = false;
+    _releasePausedWorker();
+    scanPhase = 'Stopping';
     checkpointStore?.finish('stopped');
     _notify();
   }
@@ -255,6 +330,8 @@ class CleanupController extends ChangeNotifier {
     _cancel = true;
     running = false;
     paused = false;
+    _releasePausedWorker();
+    scanPhase = 'Scan results discarded';
     completed = false;
     result = null;
     error = null;
@@ -276,6 +353,7 @@ class CleanupController extends ChangeNotifier {
   @override
   void dispose() {
     _cancel = true;
+    _releasePausedWorker();
     _scanGeneration++;
     _disposed = true;
     performance.removeListener(_notify);

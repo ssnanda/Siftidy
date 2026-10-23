@@ -91,6 +91,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
         visited: _cleanup.visited,
         total: _cleanup.total,
         analyzed: _cleanup.analyzedCount,
+        restoring: _cleanup.result?.restoring ?? false,
+        restoredIndexed: _cleanup.result?.restoredIndexed ?? 0,
+        restoredTotal: _cleanup.result?.restoredTotal ?? 0,
         elapsedMs: _cleanup.checkpointStore?.current?.elapsedMs ?? 0,
         photosPerMinute: _cleanup.checkpointStore?.current?.perMinute ?? 0,
         running: _cleanup.running,
@@ -98,6 +101,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         complete: _cleanup.completed,
         eta: _cleanup.eta,
       ),
+      onPrepareQuit: _cleanup.pauseAndSaveForQuit,
       onAction: (action) {
         if (!mounted) return;
         switch (action) {

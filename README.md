@@ -164,3 +164,16 @@ those versions never wrote an on-disk scan journal. The first scan after this
 update must analyze those photos again, then it can resume after later updates.
 
 If a saved scan cannot be decoded, Siftidy shows a recovery error and preserves the original checkpoint files instead of silently wiping progress. Open **History & storage** to inspect their real location. A successful relaunch displays the number of previously scanned photos immediately, even before the results have been rebuilt. On a genuine full application termination, the most recent *committed* batch is recoverable; a batch still being analyzed may need to run again.
+
+### Scan-resume stall and graceful quit safeguards
+
+An interrupted scan no longer recomputes every similarity group on each page of restored photos. Cached PhotoKit references are rebuilt in pages, with a visible **Restoring saved photos** count; grouping is batched and uses bounded candidate comparisons to avoid pathological white-screenshot buckets. PhotoKit pages, thumbnails and original-file reads have explicit timeouts instead of waiting indefinitely. A failed read shows an error or is reported as unavailable; existing checkpoint records stay on disk.
+
+**Pause** halts at a safe work boundary; **Resume** immediately releases the paused scanner (the current PhotoKit request might still take a few seconds to finish). The screen shows the current scan phase so a long-running operation is distinguishable from an idle scanner.
+
+When a scan is active, **Quit Completely** offers:
+- **Pause & Quit:** stop new scan work, flush analyzed rows and checkpoint metadata, then quit as soon as the save completes.
+- **Quit Now:** exit immediately, retaining the last completed checkpoint batch.
+- **Cancel:** continue scanning.
+
+Pause & Quit has a **20-second maximum**, after which a separate native watchdog terminates Siftidy even if the Flutter worker is hung. The last *committed* checkpoint survives a forced quit; unfinished individual operations might have to be retried. These controls never delete photos.

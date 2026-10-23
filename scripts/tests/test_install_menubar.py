@@ -38,6 +38,18 @@ class InstallMenuBarTests(unittest.TestCase):
             self.assertFalse(installer.install(window))
             self.assertEqual(window.read_text(), output)
 
+    def test_quit_offers_graceful_pause_with_hard_20_second_deadline(self):
+        source = installer.SWIFT
+        self.assertIn('alert.addButton(withTitle: "Pause & Quit")', source)
+        self.assertIn('alert.addButton(withTitle: "Quit Now")', source)
+        self.assertIn('alert.addButton(withTitle: "Cancel")', source)
+        self.assertIn('arguments: "prepareQuit"', source)
+        self.assertIn('deadline: .now() + 20.0', source)
+        self.assertIn('Darwin._exit(0)', source)
+        self.assertIn('quitCompletely()', source)
+        self.assertIn('let restoring = data["restoring"]', source)
+        self.assertIn('Restoring checkpoint', source)
+
     def test_terminate_only_through_explicit_quit(self):
         with tempfile.TemporaryDirectory() as temporary:
             delegate = Path(temporary) / "AppDelegate.swift"

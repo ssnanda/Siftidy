@@ -37,6 +37,12 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
   private var previousUptime: Double = 0
   private var cpu: Double = 0
   private var quittingCompletely = false
+  private var isScanning = false
+  private var gracefulQuitStarted = false
+  private let quitLock = NSLock()
+  private var quitWatchdogActive = false
+  private var quitCountdown: Timer?
+  private var quitSecondsLeft = 20
   var isInstalled: Bool { statusItem != nil }
   var allowsTermination: Bool { quittingCompletely }
 
@@ -75,6 +81,84 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
   func quitCompletely() {
     quittingCompletely = true
     NSApp.terminate(nil)
+  }
+
+  private func setWatchdogActive(_ active: Bool) {
+    quitLock.lock()
+    quitWatchdogActive = active
+    quitLock.unlock()
+  }
+
+  private func isWatchdogActive() -> Bool {
+    quitLock.lock()
+    defer { quitLock.unlock() }
+    return quitWatchdogActive
+  }
+
+  private func requestFullQuit() {
+    if gracefulQuitStarted { return }
+    if !isScanning {
+      quitCompletely()
+      return
+    }
+    let alert = NSAlert()
+    alert.messageText = "Quit Siftidy?"
+    alert.informativeText = "Pause scanning and save the current checkpoint " +
+      "before quitting, up to 20 seconds. Your photos are not deleted."
+    alert.addButton(withTitle: "Pause & Quit")
+    alert.addButton(withTitle: "Quit Now")
+    alert.addButton(withTitle: "Cancel")
+    switch alert.runModal() {
+    case .alertFirstButtonReturn:
+      beginGracefulQuit()
+    case .alertSecondButtonReturn:
+      quitCompletely()
+    default:
+      break
+    }
+  }
+
+  private func beginGracefulQuit() {
+    if gracefulQuitStarted { return }
+    gracefulQuitStarted = true
+    quitSecondsLeft = 20
+    setWatchdogActive(true)
+    statusItem?.button?.title = "◌ Saving"
+    detailsItem?.title = "Saving checkpoint · 20s maximum"
+    quitCountdown = Timer.scheduledTimer(withTimeInterval: 1.0,
+      repeats: true) { [weak self] timer in
+      guard let self = self, self.gracefulQuitStarted else {
+        timer.invalidate()
+        return
+      }
+      self.quitSecondsLeft = max(0, self.quitSecondsLeft - 1)
+      self.detailsItem?.title = "Saving checkpoint · " +
+        "\(self.quitSecondsLeft)s remaining"
+    }
+    // This deadline is on a separate thread so a hung Flutter main isolate
+    // cannot block the final hard quit. Previously flushed batches survive.
+    DispatchQueue.global(qos: .utility).asyncAfter(
+      deadline: .now() + 20.0) { [weak self] in
+      guard let self = self, self.isWatchdogActive() else { return }
+      Darwin._exit(0)
+    }
+    guard let channel = channel else { return }
+    channel.invokeMethod("action", arguments: "prepareQuit") {
+      [weak self] response in
+      DispatchQueue.main.async {
+        guard let self = self, self.isWatchdogActive() else { return }
+        if let error = response as? FlutterError {
+          self.detailsItem?.title =
+            "Checkpoint save failed (\(error.code)); forcing exit soon"
+          return
+        }
+        self.setWatchdogActive(false)
+        self.gracefulQuitStarted = false
+        self.quitCountdown?.invalidate()
+        self.quitCountdown = nil
+        self.quitCompletely()
+      }
+    }
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -153,7 +237,7 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
       return
     }
     if command == "quit" {
-      quitCompletely()
+      requestFullQuit()
       return
     }
     channel?.invokeMethod("action", arguments: command)
@@ -164,14 +248,19 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     let total = data["total"] as? Int ?? 0
     let analyzed = data["analyzed"] as? Int ?? 0
     let running = data["running"] as? Bool ?? false
+    isScanning = running
     let paused = data["paused"] as? Bool ?? false
     let complete = data["complete"] as? Bool ?? false
     let mode = data["activeMode"] as? String ?? "eco"
     let baseMode = data["baseMode"] as? String ?? "eco"
     let isIdleEnabled = data["idleTurbo"] as? Bool ?? false
+    let restoring = data["restoring"] as? Bool ?? false
+    let restoredIndexed = data["restoredIndexed"] as? Int ?? 0
+    let restoredTotal = data["restoredTotal"] as? Int ?? 0
     let percent = total > 0 ? min(100, Int(Double(visited) * 100 / Double(total))) : 0
     let pending = max(0, total - visited)
-    let state = running ? (paused ? "Paused" : "Running") :
+    let state = running ? (paused ? "Paused" :
+                  (restoring ? "Restoring checkpoint" : "Running")) :
                   (complete ? "Complete" : "Idle")
     let stateSymbol = running ? (paused ? "⏸" : "▶") : (complete ? "✓" : "–")
     let turboSeconds = data["turboSecondsRemaining"] as? Int
@@ -186,16 +275,24 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     let durationMinutes = elapsedMs / 60000
     let etaDescription = eta == nil ? "Calculating" :
                          (eta! >= 60 ? "\(eta! / 60) min" : "\(eta!) sec")
-    statusItem?.button?.title = running ? "\(stateSymbol) \(percent)%" :
-      (complete ? "▧ ✓" : "▧ —")
+    if !gracefulQuitStarted {
+      statusItem?.button?.title = running ? "\(stateSymbol) \(percent)%" :
+        (complete ? "▧ ✓" : "▧ —")
+    }
     statusItem?.button?.toolTip =
       "Siftidy · \(state)\n" +
       "\(visited) scanned / \(pending) pending (\(total) total)\n" +
       "\(analyzed) analyzed · \(percent)% complete\n" +
       String(format: "CPU %.1f%% · RAM %.0f MB\n", cpuValue, ramValue) +
       "Speed: \(speedLabel) · ETA: \(etaDescription)"
-    detailsItem?.title = "\(stateSymbol) \(state) · \(percent)% · \(speedLabel)"
-    progressItem?.title = "\(visited) scanned · \(pending) pending · \(analyzed) analyzed"
+    if !gracefulQuitStarted {
+      detailsItem?.title = "\(stateSymbol) \(state) · \(percent)% · \(speedLabel)"
+    }
+    if restoring && !gracefulQuitStarted {
+      progressItem?.title = "Restored \(restoredIndexed) / \(restoredTotal) cached photos"
+    } else {
+      progressItem?.title = "\(visited) scanned · \(pending) pending · \(analyzed) analyzed"
+    }
     resourcesItem?.title = String(format: "CPU %.1f%% · RAM %.0f MB", cpuValue, ramValue)
     durationItem?.title = String(format: "Elapsed %dm · ETA %@ · %.0f/min",
                                  durationMinutes, etaDescription, rate)
@@ -272,7 +369,7 @@ def install(path: Path) -> bool:
     needle = "RegisterGeneratedPlugins(registry: flutterViewController)"
     if source.count(needle) != 1 or "import Cocoa" not in source:
         raise RuntimeError("Unsupported generated Flutter window template")
-    source = source.replace("import Cocoa", "import Cocoa\nimport IOKit.ps", 1)
+    source = source.replace("import Cocoa", "import Cocoa\nimport IOKit.ps\nimport Darwin", 1)
     source = source.replace(needle, needle + "\n" + BOOT, 1)
     path.write_text(source + SWIFT)
     return True

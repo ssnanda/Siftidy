@@ -63,6 +63,34 @@ void main() {
     }
   });
 
+  test('Pause blocks work and Resume immediately releases the worker',
+      () async {
+    final controller = CleanupController()..running = true;
+    controller.pauseOrResume();
+    expect(controller.paused, isTrue);
+    final waiting = controller.waitWhilePaused();
+    var released = false;
+    waiting.then((_) => released = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(released, isFalse);
+    controller.pauseOrResume();
+    await waiting.timeout(const Duration(seconds: 1));
+    expect(released, isTrue);
+    expect(controller.paused, isFalse);
+    expect(controller.scanPhase, 'Resuming scan');
+    controller.dispose();
+  });
+
+  test('Stop releases a paused worker for checkpoint flush', () async {
+    final controller = CleanupController()..running = true;
+    controller.pauseOrResume();
+    final waiting = controller.waitWhilePaused();
+    controller.stop();
+    await waiting.timeout(const Duration(seconds: 1));
+    expect(controller.paused, isFalse);
+    controller.dispose();
+  });
+
   CleanupScanResult fixture() => const CleanupScanResult(
     photos: {},
     groups: CleanupGroups(
