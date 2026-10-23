@@ -464,7 +464,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
           overflow: TextOverflow.ellipsis),
         // Category results may still be accumulating. Display the current
         // numeric count, even when zero; only the scan control animates.
-        trailing: Text('$count',
+        trailing: Text(category == CleanupCategory.noPeople &&
+                (_cleanup.result?.peopleDetectionAvailable != true ||
+                    !_cleanup.analyzingPeople)
+            ? '—' : '$count',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         onTap: _deleting ? null :
           () => _chooseCleanup(category, closeDrawer: closeDrawer),
