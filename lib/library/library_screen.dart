@@ -1108,7 +1108,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           SizedBox(width: 239, child: _buildCleanupSidebar(context)),
         ],
       ]),
-      bottomNavigationBar: _dashboardView
+      bottomNavigationBar: _dashboardView ||
           _scanSettingsView || _savedSnapshot != null ||
           _activityView || _cleanupCategory != null ||
           _selected.isEmpty ? null : SafeArea(
