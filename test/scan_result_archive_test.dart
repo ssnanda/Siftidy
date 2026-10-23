@@ -34,6 +34,8 @@ void main() {
     expect(saved.similarCount, 1);
     expect(saved.blurryCount, 2);
     expect(saved.noPeopleCount, 1);
+    expect(saved.scenesCountLabel, '1');
+    expect(saved.peopleAnalyzed, isFalse);
     expect(saved.bytes, greaterThan(0));
 
     final otherProcess = ScanResultArchive(folder);
@@ -59,6 +61,28 @@ void main() {
     expect((await archive.list()).single.id, second.id);
     expect(await archive.read(first.id), isNull);
     expect(await folder.exists(), isTrue);
+  });
+
+  test('analyzed zero is different from people analysis not run', () async {
+    final archive = ScanResultArchive(folder);
+    final old = await archive.save(
+      started: DateTime(2026, 10, 23, 8),
+      total: 2, analyzed: 2,
+      groups: const CleanupGroups(
+        exact: [], similar: [], blurry: [], noPeople: [],
+      ),
+    );
+    expect((await archive.read(old.id))!.scenesCountLabel, '—');
+    final analyzed = await archive.save(
+      started: DateTime(2026, 10, 23, 9),
+      total: 2, analyzed: 2, peopleAnalyzed: true,
+      groups: const CleanupGroups(
+        exact: [], similar: [], blurry: [], noPeople: [],
+      ),
+    );
+    final recovered = await archive.read(analyzed.id);
+    expect(recovered!.peopleAnalyzed, isTrue);
+    expect(recovered.scenesCountLabel, '0');
   });
 
   test('invalid snapshot identifiers cannot escape the storage folder',
