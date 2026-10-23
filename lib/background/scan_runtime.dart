@@ -72,6 +72,7 @@ class ScanRuntime extends ChangeNotifier {
   double idleSeconds = 0;
   bool supported = false;
   bool _initialized = false;
+  bool _attached = false;
   bool _closed = false;
   DateTime? _manualTurboUntil;
   bool _manualTurboSawIdle = false;
@@ -100,6 +101,7 @@ class ScanRuntime extends ChangeNotifier {
   }) async {
     progress = readProgress;
     handleAction = onAction;
+    _attached = true;
     _menu.setMethodCallHandler((call) async {
       if (_closed) return;
       if (call.method != 'action') return;
@@ -249,7 +251,7 @@ class ScanRuntime extends ChangeNotifier {
   void dispose() {
     _closed = true;
     _poller?.cancel();
-    _menu.setMethodCallHandler(null);
+    if (_attached) _menu.setMethodCallHandler(null);
     super.dispose();
   }
 }
