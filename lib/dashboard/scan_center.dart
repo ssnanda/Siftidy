@@ -164,9 +164,9 @@ class ScanSettingsHome extends StatelessWidget {
             value: controller.autoScan,
             onChanged: controller.setAutoScan),
           SwitchListTile(contentPadding: EdgeInsets.zero,
-            title: const Text('Analyze people (slower)'),
+            title: const Text('Analyze people & scenes (slower)'),
             subtitle: const Text('Applied on the next scan; '
-                'no-people suggestions are review-only.'),
+                'scene suggestions are review-only; enabling requires a new scan.'),
             value: controller.analyzingPeople,
             onChanged: controller.running ? null : (value) =>
               controller.setNextScanOptions(
@@ -300,7 +300,7 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
                     CleanupCategory.exact => item.exactCount,
                     CleanupCategory.similar => item.similarCount,
                     CleanupCategory.blurry => item.blurryCount,
-                    CleanupCategory.noPeople => item.noPeopleCount,
+                    CleanupCategory.noPeople => item.scenesCountLabel,
                   }}'),
                 selected: _category == category,
                 onSelected: (_) => setState(() => _category = category),
