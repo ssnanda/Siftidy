@@ -10,7 +10,7 @@ import 'duplicate_selection.dart';
 import 'media_sizes.dart';
 import 'scan_history_view.dart';
 
-enum CleanupCategory { exact, similar, blurry, noPeople }
+enum CleanupCategory { exact, similar, blurry, noPeople, accidental, propertyTours }
 
 extension CleanupCategoryLabel on CleanupCategory {
   String get label => switch (this) {
@@ -18,6 +18,8 @@ extension CleanupCategoryLabel on CleanupCategory {
         CleanupCategory.similar => 'Similar photos',
         CleanupCategory.blurry => 'Possibly blurry',
         CleanupCategory.noPeople => 'Scenes & objects',
+        CleanupCategory.accidental => 'Accidental screenshots',
+        CleanupCategory.propertyTours => 'Property tours',
       };
 
   IconData get icon => switch (this) {
@@ -25,6 +27,8 @@ extension CleanupCategoryLabel on CleanupCategory {
         CleanupCategory.similar => Icons.filter_none_outlined,
         CleanupCategory.blurry => Icons.blur_on_outlined,
         CleanupCategory.noPeople => Icons.person_off_outlined,
+        CleanupCategory.accidental => Icons.screenshot_outlined,
+        CleanupCategory.propertyTours => Icons.home_outlined,
       };
 }
 
@@ -97,6 +101,9 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         CleanupCategory.similar => widget.controller.similar,
         CleanupCategory.blurry => _chunk(widget.controller.blurry),
         CleanupCategory.noPeople => _chunk(widget.controller.noPeople),
+        CleanupCategory.accidental =>
+            _chunk(widget.controller.accidentalScreenshots),
+        CleanupCategory.propertyTours => const <List<String>>[],
       };
 
   static List<List<String>> _chunk(List<String> items) => [
