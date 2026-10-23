@@ -23,7 +23,8 @@ bridge = r'''
       name: "siftidy/vision",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
     siftidyVision.setMethodCallHandler { call, result in
-      guard ["hasPeople", "screenshotReason", "propertyEvidence"].contains(call.method),
+      guard ["hasPeople", "screenshotReason", "propertyEvidence",
+                 "propertyScene"].contains(call.method),
             let bytes = call.arguments as? FlutterStandardTypedData else {
         result(FlutterMethodNotImplemented)
         return
@@ -38,6 +39,52 @@ bridge = r'''
             let detected = !(people.results ?? []).isEmpty ||
                            !(faces.results ?? []).isEmpty
             DispatchQueue.main.async { result(detected) }
+          } else if call.method == "propertyScene" {
+            // One Vision request batch per image. Explicitly distinguish
+            // humans/events, residential rooms, and neutral interior frames.
+            let humans = VNDetectHumanRectanglesRequest()
+            let faces = VNDetectFaceRectanglesRequest()
+            let classify = VNClassifyImageRequest()
+            try handler.perform([humans, faces, classify])
+            if !(humans.results ?? []).isEmpty || !(faces.results ?? []).isEmpty {
+              DispatchQueue.main.async { result(2) } // People: hard boundary
+            } else {
+              let observations = classify.results ?? []
+              let prominent = observations.prefix(15)
+              func matches(_ terms: [String], minimum: Float) -> Bool {
+                return prominent.contains { observation in
+                  let tag = observation.identifier.lowercased()
+                  return observation.confidence >= minimum &&
+                    terms.contains(where: { tag == $0 ||
+                         tag.contains(" " + $0) || tag.hasPrefix($0 + " ") })
+                }
+              }
+              let events = ["party", "concert", "wedding", "banquet",
+                            "festival", "celebration", "crowd",
+                            "conference", "reception", "auditorium"]
+              let residential = ["closet", "bedroom", "bathroom",
+                                 "living room", "dining room", "kitchen",
+                                 "staircase", "hallway", "corridor",
+                                 "shower", "bathtub", "toilet",
+                                 "residential", "house interior",
+                                 "house", "apartment", "real estate",
+                                 "home interior", "interior design"]
+              let genericInterior = ["interior", "room", "wood floor",
+                                     "flooring", "door", "doorway",
+                                     "stairs", "building interior",
+                                     "architecture", "wall", "ceiling"]
+              let code: Int
+              if matches(events, minimum: 0.13) {
+                code = 0 // Event/venue, never a property tour
+              } else if matches(residential, minimum: 0.12) {
+                code = 1 // Positive residential visual evidence
+              } else if matches(genericInterior, minimum: 0.18) {
+                code = 3 // Neutral indoor scene; needs positive neighbors
+              } else {
+                code = 0
+              }
+              DispatchQueue.main.async { result(code) }
+            }
           } else if call.method == "screenshotReason" {
             let recognize = VNRecognizeTextRequest()
             recognize.recognitionLevel = .fast
