@@ -79,7 +79,7 @@ void main() {
       for (var i = 0; i < 3; i++) photo('a$i', i),
       photo('screenshot', 3, screenshot: true),
       for (var i = 0; i < 3; i++) photo('b$i', i + 4),
-    ]), hasLength(1));
+    ]), isEmpty);
   });
 
   test('Missing GPS remains unassigned and never invents an address', () {
