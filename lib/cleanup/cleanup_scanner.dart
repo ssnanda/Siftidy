@@ -260,7 +260,14 @@ class CleanupScanner {
       }
       if (!cancelled()) await index(album);
     }
-    if (!cancelled()) await publish();
+    if (!cancelled()) {
+      await publish();
+      if (!cancelled()) {
+        await checkpointStore.reconcile(visitedIds, total);
+        visited = checkpointStore.current?.visited ?? visited;
+        skipped = checkpointStore.current?.skipped ?? skipped;
+      }
+    }
     final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
     return snapshot(groups);
   }

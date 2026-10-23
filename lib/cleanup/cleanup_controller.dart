@@ -12,8 +12,13 @@ class CleanupController extends ChangeNotifier {
   final ScanRuntime performance = ScanRuntime();
   ScanCheckpointStore? checkpointStore;
   bool showHistory = false;
-  int get analyzedCount => result?.photos.length ?? checkpointStore?.current?.analyzed ?? 0;
+  int get analyzedCount {
+    final current = result?.photos.length ?? 0;
+    final saved = checkpointStore?.current?.analyzed ?? 0;
+    return current > saved ? current : saved;
+  }
   int _baselineVisited = 0;
+  Future<void> _discardPending = Future<void>.value();
   static const _autoKey = 'cleanup_auto_scan_v02';
 
   CleanupScanResult? result;
@@ -117,6 +122,7 @@ class CleanupController extends ChangeNotifier {
     if (running) return;
     final generation = ++_scanGeneration;
     _cancel = false;
+    await _discardPending;
     await initialize();
     if (_disposed || generation != _scanGeneration) return;
     year = scopeYear;
@@ -228,7 +234,7 @@ class CleanupController extends ChangeNotifier {
     _excluded.clear();
     _dismissedExact.clear();
     _dismissedSimilar.clear();
-    checkpointStore?.discard();
+    _discardPending = checkpointStore?.discard() ?? Future<void>.value();
     _notify();
   }
 

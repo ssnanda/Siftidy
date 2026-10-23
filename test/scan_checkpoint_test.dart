@@ -64,6 +64,39 @@ void main() {
     expect((await store.load()), isNull);
   });
 
+  test('photo library count changes reuse cached work and prune removed IDs',
+      () async {
+    final store = await ScanCheckpointStore.open(folder: folder);
+    final before = await store.begin(year: null, people: false, total: 3);
+    await store.append([
+      const ScanRow('survivor', 2025, 100, 100),
+      const ScanRow('deleted', 2025, 100, 100),
+    ], mode: 'eco', elapsedMs: 120, cpu: 3, ram: 90);
+    final resumed = await store.begin(
+      year: null, people: false, total: 4);
+    expect(identical(before, resumed), isTrue);
+    expect(resumed.visited, 2);
+    expect(resumed.total, 4);
+    await store.reconcile({'survivor', 'new-photo'}, 4);
+    expect(store.current!.rows.keys, {'survivor'});
+    final restarted = await ScanCheckpointStore.open(folder: folder);
+    expect((await restarted.load())!.rows.keys, {'survivor'});
+  });
+
+  test('discard waits for pending checkpoint writes', () async {
+    final store = await ScanCheckpointStore.open(folder: folder);
+    await store.begin(year: null, people: false, total: 100);
+    final write = store.append([
+      for (var i = 0; i < 100; i++)
+        ScanRow('asset-$i', 2026, 100, 100),
+    ], mode: 'turbo', elapsedMs: 500, cpu: 30, ram: 120);
+    final discard = store.discard();
+    await Future.wait([write, discard]);
+    expect((await store.usage()).activeBytes, 0);
+    expect((await (await ScanCheckpointStore.open(folder: folder))
+      .load()), isNull);
+  });
+
   test('truncated final journal entry does not erase earlier checkpoints',
       () async {
     final store = await ScanCheckpointStore.open(folder: folder);

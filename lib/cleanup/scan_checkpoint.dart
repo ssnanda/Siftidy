@@ -102,6 +102,7 @@ class ScanCheckpointStore {
   File get _journal => File('${folder.path}/active-rows.jsonl');
   File get _history => File('${folder.path}/history.json');
   ScanCheckpoint? current;
+  Future<void> _pendingAppend = Future<void>.value();
 
   static Future<ScanCheckpointStore> open({Directory? folder}) async {
     final base = folder ?? Directory(
@@ -138,8 +139,16 @@ class ScanCheckpointStore {
   Future<ScanCheckpoint> begin({required int? year,
       required bool people, required int total}) async {
     final old = current ?? await load();
-    if (old != null && old.year == year && old.people == people &&
-        old.total == total) { return old; }
+    if (old != null && old.year == year && old.people == people) {
+      // A new/deleted asset changes the library size, not the validity
+      // of previously analyzed stable PhotoKit IDs.
+      if (old.total != total) {
+        old.total = total;
+        old.complete = false;
+        await _writeState(old);
+      }
+      return old;
+    }
     if (old != null) { await finish('replaced'); }
     final fresh = ScanCheckpoint(started: DateTime.now(),
         year: year, people: people, total: total);
@@ -150,6 +159,14 @@ class ScanCheckpointStore {
   }
 
   Future<void> append(List<ScanRow> entries, {required String mode,
+      required int elapsedMs, required double cpu, required double ram}) {
+    final write = _pendingAppend.then((_) => _appendNow(entries,
+      mode: mode, elapsedMs: elapsedMs, cpu: cpu, ram: ram));
+    _pendingAppend = write;
+    return write;
+  }
+
+  Future<void> _appendNow(List<ScanRow> entries, {required String mode,
       required int elapsedMs, required double cpu, required double ram}) async {
     final scan = current;
     if (scan == null) { return; }
@@ -167,6 +184,9 @@ class ScanCheckpointStore {
   }
 
   Future<void> finish(String status) async {
+    // Final reports and explicit discard wait for the in-flight journal
+    // flush; they must never race its metadata update.
+    await _pendingAppend;
     final scan = current;
     if (scan == null) { return; }
     if (status == 'complete') {
@@ -187,10 +207,30 @@ class ScanCheckpointStore {
   }
 
   Future<void> discard() async {
+    await _pendingAppend;
     if (current != null) { await finish('discarded'); }
     current = null;
     if (await _journal.exists()) { await _journal.delete(); }
     if (await _state.exists()) { await _state.delete(); }
+  }
+
+  /// Prune assets that no longer exist after a complete PhotoKit enumeration.
+  /// Rewriting the journal also removes superseded hash-update records.
+  Future<void> reconcile(Set<String> presentIds, int total) async {
+    await _pendingAppend;
+    final scan = current;
+    if (scan == null) { return; }
+    final missing = scan.rows.keys.where(
+      (id) => !presentIds.contains(id)).toList();
+    if (missing.isNotEmpty) {
+      final kept = scan.rows.values.where(
+        (row) => presentIds.contains(row.id)).toList();
+      final data = kept.map((row) => jsonEncode(row.toJson())).join('\n');
+      await _atomic(_journal, data.isEmpty ? '' : '$data\n');
+      for (final id in missing) { scan.rows.remove(id); }
+    }
+    scan.total = total;
+    await _writeState(scan);
   }
 
   Future<List<Map<String, dynamic>>> readHistory() async {
