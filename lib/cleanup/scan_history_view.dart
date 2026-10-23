@@ -66,7 +66,7 @@ class _ScanHistoryViewState extends State<ScanHistoryView> {
                 label: const Text('Copy folder path')),
               OutlinedButton.icon(
                 onPressed: () async {
-                  if (Platform.isMacOS) await Process.run('open', [info.folder]);
+                  if (Platform.isMacOS) { await Process.run('open', [info.folder]); }
                 },
                 icon: const Icon(Icons.folder_open_outlined),
                 label: const Text('Open in Finder')),

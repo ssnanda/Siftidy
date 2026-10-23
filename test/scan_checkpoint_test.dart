@@ -70,7 +70,7 @@ void main() {
     await store.begin(year: null, people: false, total: 10);
     await store.append([const ScanRow('safe', 2026, 100, 100)],
       mode: 'eco', elapsedMs: 100, cpu: 1, ram: 40);
-    await File(folder.path + '/active-rows.jsonl')
+    await File('${folder.path}/active-rows.jsonl')
       .writeAsString('{"id":', mode: FileMode.append, flush: true);
     final other = await ScanCheckpointStore.open(folder: folder);
     expect((await other.load())!.rows.keys, contains('safe'));

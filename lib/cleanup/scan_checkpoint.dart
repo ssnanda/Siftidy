@@ -98,14 +98,14 @@ class ScanStorageInfo {
 class ScanCheckpointStore {
   ScanCheckpointStore(this.folder);
   final Directory folder;
-  File get _state => File(folder.path + '/active-state.json');
-  File get _journal => File(folder.path + '/active-rows.jsonl');
-  File get _history => File(folder.path + '/history.json');
+  File get _state => File('${folder.path}/active-state.json');
+  File get _journal => File('${folder.path}/active-rows.jsonl');
+  File get _history => File('${folder.path}/history.json');
   ScanCheckpoint? current;
 
   static Future<ScanCheckpointStore> open({Directory? folder}) async {
     final base = folder ?? Directory(
-      (await getApplicationSupportDirectory()).path + '/ScanData');
+      '${(await getApplicationSupportDirectory()).path}/ScanData');
     await base.create(recursive: true);
     return ScanCheckpointStore(base);
   }
@@ -118,7 +118,7 @@ class ScanCheckpointStore {
       final scan = ScanCheckpoint.fromJson(d);
       if (await _journal.exists()) {
         for (final line in await _journal.readAsLines()) {
-          if (line.isEmpty) continue;
+          if (line.isEmpty) { continue; }
           try {
             final row = ScanRow.fromJson(
               jsonDecode(line) as Map<String, dynamic>);
@@ -140,7 +140,7 @@ class ScanCheckpointStore {
     final old = current ?? await load();
     if (old != null && old.year == year && old.people == people &&
         old.total == total) return old;
-    if (old != null) await finish('replaced');
+    if (old != null) { await finish('replaced'); }
     final fresh = ScanCheckpoint(started: DateTime.now(),
         year: year, people: people, total: total);
     await _journal.writeAsString('', flush: true);
@@ -154,7 +154,7 @@ class ScanCheckpointStore {
     final scan = current;
     if (scan == null) return;
     if (entries.isNotEmpty) {
-      final data = entries.map((e) => jsonEncode(e.toJson())).join('\n') + '\n';
+      final data = '${entries.map((e) => jsonEncode(e.toJson())).join('\n')}\n';
       await _journal.writeAsString(data, mode: FileMode.append, flush: true);
       for (final entry in entries) { scan.rows[entry.id] = entry; }
     }
@@ -162,7 +162,7 @@ class ScanCheckpointStore {
     scan.modes[mode] = (scan.modes[mode] ?? 0) + elapsedMs;
     scan.cpuSum += cpu;
     scan.samples++;
-    if (ram > scan.peakRam) scan.peakRam = ram;
+    if (ram > scan.peakRam) { scan.peakRam = ram; }
     await _writeState(scan);
   }
 
@@ -187,10 +187,10 @@ class ScanCheckpointStore {
   }
 
   Future<void> discard() async {
-    if (current != null) await finish('discarded');
+    if (current != null) { await finish('discarded'); }
     current = null;
-    if (await _journal.exists()) await _journal.delete();
-    if (await _state.exists()) await _state.delete();
+    if (await _journal.exists()) { await _journal.delete(); }
+    if (await _state.exists()) { await _state.delete(); }
   }
 
   Future<List<Map<String, dynamic>>> readHistory() async {
@@ -214,7 +214,7 @@ class ScanCheckpointStore {
       _atomic(_state, jsonEncode(scan.toJson()));
 
   Future<void> _atomic(File destination, String data) async {
-    final temporary = File(destination.path + '.tmp');
+    final temporary = File('${destination.path}.tmp');
     await temporary.writeAsString(data, flush: true);
     await temporary.rename(destination.path);
   }
