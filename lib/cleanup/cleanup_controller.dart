@@ -57,6 +57,8 @@ class CleanupController extends ChangeNotifier {
   bool _settingsLoaded = false;
   Set<String> _protected = {};
   final Set<String> _excluded = {};
+  final Set<String> _dismissedAccidental = {};
+  static const _dismissedAccidentalKey = 'smart_accidental_ignored_v03';
   final Set<String> _dismissedExact = {};
   final Set<String> _dismissedSimilar = {};
 
@@ -87,7 +89,8 @@ class CleanupController extends ChangeNotifier {
       .where((id) => !_excluded.contains(id)).toList();
   List<String> get accidentalScreenshots =>
       (result?.groups.accidentalScreenshots ?? [])
-          .where((id) => !_excluded.contains(id)).toList();
+          .where((id) => !_excluded.contains(id) &&
+              !_dismissedAccidental.contains(id)).toList();
   List<PropertyTourSuggestion> get propertyTours =>
       result?.groups.propertyTours ?? const [];
 
@@ -156,6 +159,8 @@ class CleanupController extends ChangeNotifier {
       }
     }
     autoScan = prefs.getBool(_autoKey) ?? true;
+    _dismissedAccidental.addAll(
+        prefs.getStringList(_dismissedAccidentalKey) ?? const []);
     _settingsLoaded = true;
     _notify();
   }
@@ -481,6 +486,14 @@ class CleanupController extends ChangeNotifier {
     _dismissedSimilar.clear();
     _discardPending = checkpointStore?.discard() ?? Future<void>.value();
     _notify();
+  }
+
+  Future<void> dismissAccidental(String id) async {
+    _dismissedAccidental.add(id);
+    _notify();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_dismissedAccidentalKey,
+        _dismissedAccidental.toList());
   }
 
   void exclude(Iterable<String> ids) {
