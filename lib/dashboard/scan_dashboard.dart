@@ -142,7 +142,9 @@ class DashboardHome extends StatelessWidget {
                     DropdownMenuItem(value: mode, child: Text(mode.title)),
                 ],
                 onChanged: (mode) {
-                  if (mode != null) controller.performance.setBaseMode(mode);
+                  if (mode != null) {
+                    controller.performance.setBaseMode(mode);
+                  }
                 },
               ),
               PopupMenuButton<int>(
