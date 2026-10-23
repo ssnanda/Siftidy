@@ -85,6 +85,11 @@ class CleanupController extends ChangeNotifier {
       .where((id) => !_excluded.contains(id)).toList();
   List<String> get noPeople => (result?.groups.noPeople ?? [])
       .where((id) => !_excluded.contains(id)).toList();
+  List<String> get accidentalScreenshots =>
+      (result?.groups.accidentalScreenshots ?? [])
+          .where((id) => !_excluded.contains(id)).toList();
+  List<PropertyTourSuggestion> get propertyTours =>
+      result?.groups.propertyTours ?? const [];
 
   List<List<String>> _filteredGroups(
     List<List<String>> source, Set<String> dismissed,
@@ -138,6 +143,7 @@ class CleanupController extends ChangeNotifier {
           if (saved != null) {
             result = CleanupScanResult(
               photos: const {}, groups: saved.groups,
+              smartAnalyzed: saved.smartAnalyzed,
               total: prior.total, visited: prior.visited,
               skipped: prior.skipped,
               peopleDetectionAvailable: saved.peopleAnalyzed == true,
@@ -284,6 +290,7 @@ class CleanupController extends ChangeNotifier {
             total: scan.total,
             analyzed: scan.analyzed,
             groups: finalResult.groups,
+            smartAnalyzed: finalResult.smartAnalyzed,
             peopleAnalyzed: scan.people &&
                 finalResult.peopleDetectionAvailable,
           );
@@ -356,6 +363,7 @@ class CleanupController extends ChangeNotifier {
       currentResult = CleanupScanResult(
         photos: updated,
         groups: currentResult.groups,
+        smartAnalyzed: currentResult.smartAnalyzed,
         total: currentResult.total,
         visited: currentResult.visited,
         skipped: currentResult.skipped,
