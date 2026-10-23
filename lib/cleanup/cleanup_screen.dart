@@ -57,6 +57,7 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   final Set<String> _selectedPhotos = {};
   final Map<String, String> _keeperChoices = {};
   String? _expanded;
+  ScreenshotSuggestionKind? _screenshotFilter;
   late int _observedRevision;
   bool _busy = false;
   String? _message;
@@ -92,6 +93,7 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
       _selectedPhotos.clear();
       _keeperChoices.clear();
       _expanded = null;
+      _screenshotFilter = null;
       _message = null;
     }
   }
@@ -101,8 +103,13 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         CleanupCategory.similar => widget.controller.similar,
         CleanupCategory.blurry => _chunk(widget.controller.blurry),
         CleanupCategory.noPeople => _chunk(widget.controller.noPeople),
-        CleanupCategory.accidental =>
-            _chunk(widget.controller.accidentalScreenshots),
+        CleanupCategory.accidental => _chunk([
+          for (final id in widget.controller.accidentalScreenshots)
+            if (_screenshotFilter == null ||
+                screenshotKindForReason(widget.controller.result?.groups
+                    .accidentalReasons[id]) == _screenshotFilter)
+              id,
+        ]),
         CleanupCategory.propertyTours => const <List<String>>[],
       };
 
@@ -398,6 +405,37 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
               ? 'One tile = one set. Select sets, then keep one photo from each and delete the extras.'
               : 'Select the photos you want to review or delete. No automatic removal.',
             style: const TextStyle(fontSize: 12)),
+          if (widget.category == CleanupCategory.accidental &&
+              widget.controller.accidentalScreenshots.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 6, children: [
+              FilterChip(
+                label: Text('All ${widget.controller.accidentalScreenshots.length}'),
+                selected: _screenshotFilter == null,
+                onSelected: (_) => setState(() {
+                  _screenshotFilter = null;
+                  _selectedPhotos.clear();
+                }),
+              ),
+              for (final kind in ScreenshotSuggestionKind.values)
+                if (widget.controller.accidentalScreenshots.where(
+                    (id) => screenshotKindForReason(widget.controller
+                        .result?.groups.accidentalReasons[id]) == kind)
+                    .isNotEmpty)
+                  FilterChip(
+                    label: Text('${kind.label} · ${widget.controller
+                        .accidentalScreenshots.where((id) =>
+                            screenshotKindForReason(widget.controller.result
+                                ?.groups.accidentalReasons[id]) == kind)
+                        .length}'),
+                    selected: _screenshotFilter == kind,
+                    onSelected: (_) => setState(() {
+                      _screenshotFilter = kind;
+                      _selectedPhotos.clear();
+                    }),
+                  ),
+            ]),
+          ],
           const SizedBox(height: 10),
           Wrap(spacing: 12, runSpacing: 7,
             crossAxisAlignment: WrapCrossAlignment.center, children: [
