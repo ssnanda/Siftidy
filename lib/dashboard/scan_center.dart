@@ -4,6 +4,7 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
 import '../background/scan_runtime.dart';
 import '../cleanup/cleanup_controller.dart';
+import '../cleanup/photo_analysis.dart';
 import '../cleanup/cleanup_screen.dart';
 import '../cleanup/scan_result_archive.dart';
 import 'scan_dashboard.dart';
@@ -127,6 +128,7 @@ class SavedSnapshotView extends StatefulWidget {
 
 class _SavedSnapshotViewState extends State<SavedSnapshotView> {
   CleanupCategory _category = CleanupCategory.exact;
+  ScreenshotSuggestionKind? _screenshotFilter;
 
   List<List<String>> get _groups => switch (_category) {
     CleanupCategory.exact => widget.snapshot.groups.exact,
@@ -138,7 +140,11 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
       for (final id in widget.snapshot.groups.noPeople) [id],
     ],
     CleanupCategory.accidental => [
-      for (final id in widget.snapshot.groups.accidentalScreenshots) [id],
+      for (final id in widget.snapshot.groups.accidentalScreenshots)
+        if (_screenshotFilter == null ||
+            screenshotKindForReason(widget.snapshot.groups
+                .accidentalReasons[id]) == _screenshotFilter)
+          [id],
     ],
     CleanupCategory.propertyTours => [
       for (final tour in widget.snapshot.groups.propertyTours) tour.ids,
@@ -181,10 +187,37 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
                         ? item.groups.propertyTours.length : '—',
                   }}'),
                 selected: _category == category,
-                onSelected: (_) => setState(() => _category = category),
+                onSelected: (_) => setState(() {
+                  _category = category;
+                  _screenshotFilter = null;
+                }),
               )),
         ]),
       ),
+      if (_category == CleanupCategory.accidental &&
+          item.groups.accidentalScreenshots.isNotEmpty)
+        SingleChildScrollView(scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          child: Row(children: [
+            ChoiceChip(
+              label: const Text('All screenshots'),
+              selected: _screenshotFilter == null,
+              onSelected: (_) => setState(() => _screenshotFilter = null),
+            ),
+            const SizedBox(width: 8),
+            for (final kind in ScreenshotSuggestionKind.values)
+              if (item.groups.accidentalScreenshots.any((id) =>
+                  screenshotKindForReason(item.groups.accidentalReasons[id])
+                      == kind)) ...[
+                ChoiceChip(
+                  label: Text(kind.label),
+                  selected: _screenshotFilter == kind,
+                  onSelected: (_) => setState(() => _screenshotFilter = kind),
+                ),
+                const SizedBox(width: 8),
+              ],
+          ]),
+        ),
       const SizedBox(height: 10),
       Expanded(child: _groups.isEmpty
         ? const Center(child: Text('No matches in this saved category.'))
