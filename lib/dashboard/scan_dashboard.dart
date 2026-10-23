@@ -202,6 +202,18 @@ class DashboardHome extends StatelessWidget {
                     controller.analyzingPeople
                 ? 'Photos without a detected person · review only'
                 : 'Not analyzed · enable people/scene analysis in settings'),
+          _resultTile(context, tileWidth, CleanupCategory.accidental,
+            controller.result?.smartAnalyzed == true
+                ? '${controller.accidentalScreenshots.length}' : '—',
+            controller.result?.smartAnalyzed == true
+                ? 'Lock screens, empty or repeated captures · review'
+                : 'Run the v0.3 smart scan to analyze screenshots'),
+          _resultTile(context, tileWidth, CleanupCategory.propertyTours,
+            controller.result?.smartAnalyzed == true
+                ? '${controller.propertyTours.length}' : '—',
+            controller.result?.smartAnalyzed == true
+                ? 'Home photo sequences · group by location or address'
+                : 'Run the v0.3 smart scan for property sequences'),
         ]);
       }),
       if (controller.running) const Padding(
@@ -396,6 +408,8 @@ class _RecentScanRunsState extends State<RecentScanRuns> {
                               'Similar ${snapshot.similarCount} · '
                               'Blurry ${snapshot.blurryCount} · '
                               'Scenes ${snapshot.scenesCountLabel} · '
+                              'Screenshots ${snapshot.smartAnalyzed ? snapshot.groups.accidentalScreenshots.length.toString() : "—"} · '
+                              'Tours ${snapshot.smartAnalyzed ? snapshot.groups.propertyTours.length.toString() : "—"} · '
                               '${scanFileSize(snapshot.bytes)}',
                               style: const TextStyle(fontSize: 12)),
                           if (snapshot == null)
