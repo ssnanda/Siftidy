@@ -15,7 +15,7 @@ if marker in source:
 needle = 'RegisterGeneratedPlugins(registry: flutterViewController)'
 if needle not in source or 'import FlutterMacOS' not in source:
     raise SystemExit('Unexpected Flutter macOS window template; cannot install Vision bridge')
-source = source.replace('import FlutterMacOS', 'import FlutterMacOS\\nimport Vision\\nimport CoreLocation', 1)
+source = source.replace('import FlutterMacOS', 'import FlutterMacOS\nimport Vision\nimport CoreLocation', 1)
 bridge = r'''
 
     // Siftidy Apple Vision bridge v0.2
