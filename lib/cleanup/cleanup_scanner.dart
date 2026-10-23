@@ -129,7 +129,7 @@ class CleanupScanner {
       bool checkpointOnly = false,
     }) async {
       // A quit/cancel must still commit the current page's completed work.
-      if (cancelled() && !checkpointOnly) return;
+      if (cancelled() && !checkpointOnly) { return; }
       final now = DateTime.now();
       final elapsed = now.difference(lastSavedAt).inMilliseconds;
       lastSavedAt = now;
@@ -140,7 +140,7 @@ class CleanupScanner {
           cpu: performance.processCpu, ram: performance.ramMb);
         pending.clear();
       }
-      if (checkpointOnly || cancelled()) return;
+      if (checkpointOnly || cancelled()) { return; }
       // Restoration can touch 25,000+ cached photos. Repeating classification
       // for each page makes that phase appear frozen for minutes.
       if (finalPass ||
@@ -187,16 +187,16 @@ class CleanupScanner {
           smartAnalyzed = true;
         }
       }
-      if (!cancelled()) onProgress(snapshot(groups));
+      if (!cancelled()) { onProgress(snapshot(groups)); }
     }
 
     Future<String?> hashFile(AssetEntity asset) async {
-      if (hashes.containsKey(asset.id)) return hashes[asset.id];
+      if (hashes.containsKey(asset.id)) { return hashes[asset.id]; }
       String? hash;
       try {
         reportPhase('Verifying exact duplicates');
         await waitIfPaused();
-        if (cancelled()) return null;
+        if (cancelled()) { return null; }
         final file = await asset.originFile
             .timeout(const Duration(seconds: 12));
         if (file != null) {
@@ -216,7 +216,7 @@ class CleanupScanner {
         {required bool screenshot}) async {
       await waitIfPaused();
       await performance.pace(cancelled: cancelled);
-      if (cancelled()) return const _ThumbnailAnalysis(null, null, null);
+      if (cancelled()) { return const _ThumbnailAnalysis(null, null, null); }
       reportPhase('Analyzing new photos');
       final bytes = await asset.thumbnailDataWithSize(
         const ThumbnailSize(192, 192),
@@ -228,13 +228,13 @@ class CleanupScanner {
       }
       final fingerprint = await compute(fingerprintThumbnail, bytes)
           .timeout(const Duration(seconds: 20));
-      if (fingerprint == null) return const _ThumbnailAnalysis(null, null, null);
+      if (fingerprint == null) { return const _ThumbnailAnalysis(null, null, null); }
       bool? people;
       if (analyzePeople && visionUsable) {
         try {
           people = await _vision.invokeMethod<bool>('hasPeople', bytes)
               .timeout(const Duration(seconds: 15));
-          if (people != null) peopleAvailable = true;
+          if (people != null) { peopleAvailable = true; }
         } on MissingPluginException {
           visionUsable = false;
         } on PlatformException {
@@ -265,17 +265,17 @@ class CleanupScanner {
     Future<void> index(AssetPathEntity path, {bool isScreenshot = false}) async {
       for (var page = 0; !cancelled(); page++) {
         await waitIfPaused();
-        if (cancelled()) break;
+        if (cancelled()) { break; }
         reportPhase('Reading Photos library');
         final batch = await path.getAssetListPaged(page: page, size: _pageSize)
             .timeout(const Duration(seconds: 30),
                 onTimeout: () => throw TimeoutException(
                     'Photos library page $page did not respond within 30s'));
-        if (batch.isEmpty) break;
+        if (batch.isEmpty) { break; }
         var cursor = 0;
         while (cursor < batch.length && !cancelled()) {
           await waitIfPaused();
-          if (cancelled()) break;
+          if (cancelled()) { break; }
           // Active mode is read for each batch, so a menu-bar Turbo switch
           // changes real work concurrency without restarting the scan.
           final limit = performance.activeMode.concurrency;
@@ -283,7 +283,7 @@ class CleanupScanner {
           cursor += slice.length;
           final toAnalyze = <AssetEntity>[];
           for (final asset in slice) {
-            if (!visitedIds.add(asset.id)) continue;
+            if (!visitedIds.add(asset.id)) { continue; }
             final cached = restored[asset.id];
             if (cached != null) {
               restoredIndexed++;
@@ -292,7 +292,7 @@ class CleanupScanner {
                     ' / ${restored.length}');
               }
               years.add(cached.year);
-              if (cached.photo?.hasPeople != null) peopleAvailable = true;
+              if (cached.photo?.hasPeople != null) { peopleAvailable = true; }
               if (cached.photo != null &&
                   !protectedIds.contains(asset.id) &&
                   (year == null || cached.year == year)) {
@@ -325,7 +325,7 @@ class CleanupScanner {
               return const _ThumbnailAnalysis(null, null, null);
             }
           }));
-          if (cancelled()) break;
+          if (cancelled()) { break; }
           for (var i = 0; i < results.length && !cancelled(); i++) {
             final asset = toAnalyze[i];
             final fingerprint = results[i].fingerprint;
@@ -386,7 +386,7 @@ class CleanupScanner {
           }
         }
         await publish();
-        if (batch.length < _pageSize) break;
+        if (batch.length < _pageSize) { break; }
       }
     }
 
@@ -402,7 +402,7 @@ class CleanupScanner {
       if (screenshots != null && screenshots.id != album.id) {
         await index(screenshots, isScreenshot: true);
       }
-        if (!cancelled()) await index(album);
+        if (!cancelled()) { await index(album); }
       }
       if (!cancelled()) {
         await publish(finalPass: true);
