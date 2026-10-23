@@ -1,9 +1,8 @@
 # Siftidy smart categories — user-requested design (October 23, 2026)
 
-The current version 0.2 must prioritize stable scanning and safe resumption. Two
-new review categories below are **specified for implementation in v0.3**; do
-not present them as detected/shipped until their classifier, UI, persistence,
-and tests exist. Existing scans remain usable.
+The v0.3 scanner has review-only screenshot suggestions and on-device
+property-scene detection. These are conservative heuristics, not a guarantee
+of correct labels. A fresh v0.3 scan is required for new detections.
 
 ## Scenes & objects (fixed in v0.2)
 
@@ -35,8 +34,9 @@ Candidate signals should include:
 4. **Mis-taps:** short screenshot bursts with no meaningful visual change,
    including accidentally captured volume/notification/control-center screens.
 
-Show subtype/reason, screenshot thumbnail, taken timestamp and count; support
-Keep, Not accidental, and selected review/deletion through Apple Photos.
+Show **Lock screens**, **Blank captures**, **Repeated captures** and **Other
+suggestions** as subcategories when those results exist. Show the reason and
+allow **Not accidental**, deliberate review and user-controlled deletion.
 Persist user's decisions. Review-first; no auto-delete or automatic move.
 
 ## Property tours (v0.3 Smart Organization)
@@ -49,13 +49,18 @@ Suggestion pipeline:
 1. Collect **creation date/time and optional GPS metadata** via PhotoKit's
    `AssetEntity.createDateTime` and `latLng`; do not export originals.
 2. Candidate sessions contain **at least 5 consecutive/near-consecutive**
-   image captures, initially allowing gaps no longer than 20 minutes and
-   geotagged coordinates within an initial ~200-metre radius. Exclude
+   image captures, initially allowing gaps no longer than 30 minutes and
+   geotagged coordinates within an initial ~200-metre radius, with **no maximum
+   tour photo count or maximum total duration**. Exclude
    screenshots, videos, unrelated jumps and bursts at different locations.
 3. Require independent visual evidence that a meaningful portion of the group
    contains **home exteriors, rooms, kitchens, bathrooms, hallways, or
    comparable real-estate/interior content**, using on-device Apple Vision
-   classification on a bounded sample. Merely sharing a time and GPS pin
+   classification: a sample gates expensive work, then **every frame** in a
+   promising tour is checked. People and unrelated event frames break the
+   sequence, neutral hallway/doorway frames remain when supported by adjacent
+   residential rooms. The five-photo rule is a minimum, never a maximum.
+   Merely sharing a time and GPS pin
    must not create a confirmed "property" category.
 4. If GPS is absent, image/time evidence may propose a **Needs location**
    session; let the user enter or assign an address. Do not fabricate GPS.
@@ -84,6 +89,8 @@ Suggestion pipeline:
   expected negatives.
 - Verify at least five property-looking consecutive photos at same place
   produce a candidate; non-property family/event batches should not.
+- Verify 180+ photo property sequences stay together, people/event frames
+  are excluded, and ordinary gatherings never become residential tours.
 - Verify 4-photo series are excluded, sessions separated by date remain
   distinct, mismatched locations split correctly, and no GPS produces an
   explicitly unassigned location rather than a guessed address.
