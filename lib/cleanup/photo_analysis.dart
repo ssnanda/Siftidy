@@ -84,18 +84,17 @@ PhotoFingerprint? fingerprintThumbnail(Uint8List bytes) {
 /// isolate for each individual Photos asset. A null thumbnail is an
 /// unavailable asset, not a blank or blurry photo.
 List<PhotoFingerprint?> fingerprintThumbnailBatch(List<Uint8List?> bytes) =>
-    [
-      for (final item in bytes)
-        (() {
-          if (item == null) return null;
-          try {
-            return fingerprintThumbnail(item);
-          } catch (_) {
-            // Corrupt or unsupported images must not fail the entire slice.
-            return null;
-          }
-        })(),
-    ];
+    [for (final item in bytes) _safeFingerprint(item)];
+
+PhotoFingerprint? _safeFingerprint(Uint8List? bytes) {
+  if (bytes == null) { return null; }
+  try {
+    return fingerprintThumbnail(bytes);
+  } catch (_) {
+    // A corrupt thumbnail cannot abort the rest of the fast scan batch.
+    return null;
+  }
+}
 
 double _luma(img.Pixel p) =>
     0.2126 * p.r.toDouble() + 0.7152 * p.g.toDouble() + 0.0722 * p.b.toDouble();
