@@ -50,15 +50,15 @@ bridge = r'''
               }
               return (candidate.string.lowercased(), Float(observation.boundingBox.midY))
             }
-            let clock = words.contains { word, y in
-              return y > 0.42 &&
-                     word.range(of: #"^\d{1,2}:\d{2}$"#,
-                                options: .regularExpression) != nil
+            let clock = words.contains { candidate in
+              return candidate.1 > 0.42 &&
+                     candidate.0.range(of: #"^\d{1,2}:\d{2}$"#,
+                                       options: .regularExpression) != nil
             }
-            let weekday = words.contains { word, _ in
+            let weekday = words.contains { candidate in
               return ["monday", "tuesday", "wednesday", "thursday",
                       "friday", "saturday", "sunday"].contains { day in
-                word.contains(day)
+                candidate.0.contains(day)
               }
             }
             // A clock alone is not sufficient: a normal app may show time.
