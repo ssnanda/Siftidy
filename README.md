@@ -92,7 +92,7 @@ reports neither its live item count nor confirmed disk space freed.
 
 ## Menu-bar background scanning (v0.2)
 
-Closing the main window **hides it without terminating Siftidy**. The scan
+Closing the main window **hides it without terminating Siftidy**. **⌘Q now has the same menu-bar hide behavior**, so it does not stop the scan or remove the menu-bar percentage icon. **Quit Completely** in the status menu is the only normal user action that terminates Siftidy. The scan
 continues in the menu bar while the Mac is awake. Hover over the small ▧
 percentage status item to see total/scanned/pending counts, analyzed photos,
 approximate ETA, current process CPU percentage, current resident RAM, and
@@ -156,3 +156,5 @@ only and does not contain original/full-resolution photo files.
 A scan that started under **v0.2.8 or earlier cannot be resumed**, because
 those versions never wrote an on-disk scan journal. The first scan after this
 update must analyze those photos again, then it can resume after later updates.
+
+If a saved scan cannot be decoded, Siftidy shows a recovery error and preserves the original checkpoint files instead of silently wiping progress. Open **History & storage** to inspect their real location. A successful relaunch displays the number of previously scanned photos immediately, even before the results have been rebuilt. On a genuine full application termination, the most recent *committed* batch is recoverable; a batch still being analyzed may need to run again.

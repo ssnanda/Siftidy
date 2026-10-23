@@ -16,7 +16,7 @@ SWIFT = r'''
 
 // Siftidy menu bar and scan performance bridge v0.2
 // Closing the window hides it; only Quit Completely terminates Siftidy.
-private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
+final class SiftidyMenuBar: NSObject, NSWindowDelegate {
   static let shared = SiftidyMenuBar()
 
   private weak var appWindow: NSWindow?
@@ -36,6 +36,9 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
   private var previousCpuSeconds: Double = 0
   private var previousUptime: Double = 0
   private var cpu: Double = 0
+  private var quittingCompletely = false
+  var isInstalled: Bool { statusItem != nil }
+  var allowsTermination: Bool { quittingCompletely }
 
   func install(window: NSWindow, messenger: FlutterBinaryMessenger) {
     appWindow = window
@@ -63,10 +66,19 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     update([:])
   }
 
-  func windowShouldClose(_ sender: NSWindow) -> Bool {
-    sender.orderOut(nil)
+  func hideToMenuBar() {
+    appWindow?.orderOut(nil)
     channel?.invokeMethod("action", arguments: "windowHidden")
     NSApp.setActivationPolicy(.accessory)
+  }
+
+  func quitCompletely() {
+    quittingCompletely = true
+    NSApp.terminate(nil)
+  }
+
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    hideToMenuBar()
     return false
   }
 
@@ -141,7 +153,7 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
       return
     }
     if command == "quit" {
-      NSApp.terminate(nil)
+      quitCompletely()
       return
     }
     channel?.invokeMethod("action", arguments: command)
@@ -261,6 +273,33 @@ def install(path: Path) -> bool:
     return True
 
 
+QUIT_MARKER = "// Siftidy Cmd-Q hides window; explicit Quit Completely exits"
+QUIT_POLICY = """
+  // Siftidy Cmd-Q hides window; explicit Quit Completely exits.
+  override func applicationShouldTerminate(_ sender: NSApplication)
+      -> NSApplication.TerminateReply {
+    let tray = SiftidyMenuBar.shared
+    if tray.allowsTermination || !tray.isInstalled {
+      return .terminateNow
+    }
+    tray.hideToMenuBar()
+    return .terminateCancel
+  }
+"""
+
+
+def install_quit_policy(path: Path) -> bool:
+    content = path.read_text()
+    if QUIT_MARKER in content:
+        return False
+    needle = "override func applicationShouldTerminateAfterLastWindowClosed"
+    if content.count(needle) != 1:
+        raise RuntimeError("Generated AppDelegate template has changed")
+    content = content.replace(needle, QUIT_POLICY + "\n  " + needle, 1)
+    path.write_text(content)
+    return True
+
+
 def keep_running_on_last_window_close(path: Path) -> bool:
     content = path.read_text()
     marker = "applicationShouldTerminateAfterLastWindowClosed"
@@ -280,5 +319,8 @@ if __name__ == "__main__":
         print("Installed Siftidy menu-bar scanning and CPU/RAM/idle bridge")
     else:
         print("Siftidy menu-bar scanning already installed")
-    if keep_running_on_last_window_close(Path("macos/Runner/AppDelegate.swift")):
+    delegate = Path("macos/Runner/AppDelegate.swift")
+    if keep_running_on_last_window_close(delegate):
         print("Siftidy now remains active when the last window is closed")
+    if install_quit_policy(delegate):
+        print("Cmd-Q hides Siftidy; only Quit Completely stops its background scan")

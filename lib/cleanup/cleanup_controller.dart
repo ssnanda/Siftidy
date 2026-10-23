@@ -12,6 +12,8 @@ class CleanupController extends ChangeNotifier {
   final ScanRuntime performance = ScanRuntime();
   ScanCheckpointStore? checkpointStore;
   bool showHistory = false;
+  String? resumeStatus;
+  Future<void>? _initializing;
   int get analyzedCount {
     final current = result?.photos.length ?? 0;
     final saved = checkpointStore?.current?.analyzed ?? 0;
@@ -41,8 +43,14 @@ class CleanupController extends ChangeNotifier {
   final Set<String> _dismissedExact = {};
   final Set<String> _dismissedSimilar = {};
 
-  int get visited => result?.visited ?? 0;
-  int get total => result?.total ?? 0;
+  // Keep the recovered count visible while the scanner is rebuilding result
+  // groups. A new session must not display zero after restoring its journal.
+  int get visited {
+    final saved = checkpointStore?.current?.visited ?? 0;
+    final shown = result?.visited ?? 0;
+    return shown > saved ? shown : saved;
+  }
+  int get total => result?.total ?? checkpointStore?.current?.total ?? 0;
   double get fraction => total == 0 ? 0 : (visited / total).clamp(0.0, 1.0);
   Duration? get eta => _eta;
   int get exactCount =>
@@ -74,14 +82,21 @@ class CleanupController extends ChangeNotifier {
     performance.sendStatus();
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize() => _initializing ??= _initializeOnce();
+
+  Future<void> _initializeOnce() async {
     if (_settingsLoaded) return;
     final prefs = await SharedPreferences.getInstance();
     await performance.initialize();
     checkpointStore ??= await ScanCheckpointStore.open();
     final prior = await checkpointStore!.load();
     if (_disposed) return;
+    if (checkpointStore!.recoveryIssue != null) {
+      error = checkpointStore!.recoveryIssue;
+    }
     if (prior != null) {
+      resumeStatus = 'Restored ${prior.visited} previously scanned photos '
+          'from the local checkpoint.';
       year = prior.year;
       analyzingPeople = prior.people;
       completed = prior.complete;
@@ -110,7 +125,8 @@ class CleanupController extends ChangeNotifier {
   Future<void> startIfEnabled(Set<String> protectedIds) async {
     _protected = Set<String>.of(protectedIds);
     await initialize();
-    if (autoScan && !running && !_cancel) {
+    if (autoScan && !running && !_cancel &&
+        checkpointStore?.recoveryIssue == null) {
       // Restore thumbnails and resume unfinished work without re-decoding
       // every photo previously analyzed. Completed scans hydrate the gallery.
       start(scopeYear: checkpointStore?.current?.year,
@@ -125,6 +141,11 @@ class CleanupController extends ChangeNotifier {
     await _discardPending;
     await initialize();
     if (_disposed || generation != _scanGeneration) return;
+    if (checkpointStore?.recoveryIssue != null) {
+      error = checkpointStore!.recoveryIssue;
+      _notify();
+      return;
+    }
     year = scopeYear;
     analyzingPeople = people ?? analyzingPeople;
     _baselineVisited = checkpointStore?.current?.year == year &&
@@ -134,7 +155,12 @@ class CleanupController extends ChangeNotifier {
     paused = false;
     completed = false;
     error = null;
-    if (_baselineVisited == 0) result = null;
+    if (_baselineVisited == 0) {
+      result = null;
+      resumeStatus = null;
+    } else {
+      resumeStatus = 'Resuming $_baselineVisited previously scanned photos.';
+    }
     _excluded.clear();
     _dismissedExact.clear();
     _dismissedSimilar.clear();
@@ -231,6 +257,7 @@ class CleanupController extends ChangeNotifier {
     error = null;
     _eta = null;
     _startedAt = null;
+    resumeStatus = null;
     _excluded.clear();
     _dismissedExact.clear();
     _dismissedSimilar.clear();

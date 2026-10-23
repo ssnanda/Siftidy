@@ -504,9 +504,16 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                 : controller.completed
                     ? 'Scan complete · ${controller.analyzedCount} analyzed '
                       '· ${result?.skipped ?? 0} unavailable'
-                    : 'Scan stopped or not started.',
+                    : controller.visited > 0
+                        ? 'Saved checkpoint: ${controller.visited} / '
+                          '${controller.total} photos · available to resume'
+                        : 'Scan stopped or not started.',
             style: const TextStyle(fontSize: 12),
           )),
+          if (controller.resumeStatus != null)
+            Text(controller.resumeStatus!,
+              style: TextStyle(fontSize: 12,
+                color: Theme.of(context).colorScheme.primary)),
           if (controller.error != null)
             Text(controller.error!, style: const TextStyle(color: Colors.red)),
           if (_message != null)

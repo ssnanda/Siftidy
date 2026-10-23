@@ -102,6 +102,7 @@ class ScanCheckpointStore {
   File get _journal => File('${folder.path}/active-rows.jsonl');
   File get _history => File('${folder.path}/history.json');
   ScanCheckpoint? current;
+  String? recoveryIssue;
   Future<void> _pendingAppend = Future<void>.value();
 
   static Future<ScanCheckpointStore> open({Directory? folder}) async {
@@ -112,7 +113,14 @@ class ScanCheckpointStore {
   }
 
   Future<ScanCheckpoint?> load() async {
-    if (!await _state.exists()) { return null; }
+    recoveryIssue = null;
+    if (!await _state.exists()) {
+      if (await _journal.exists() && await _journal.length() > 0) {
+        recoveryIssue = 'Scan metadata is missing, but the existing '
+            'photo-analysis journal is preserved. No data was erased.';
+      }
+      return null;
+    }
     try {
       final d = jsonDecode(await _state.readAsString()) as Map<String, dynamic>;
       if (d['schema'] != 1 || d['algorithm'] != 3) { return null; }
@@ -131,14 +139,20 @@ class ScanCheckpointStore {
       }
       current = scan;
       return scan;
-    } catch (_) {
-      return null; // Corrupt/old schema: re-analyze rather than guess.
+    } catch (exception) {
+      recoveryIssue = 'Unable to read saved scan metadata: $exception. '
+          'Original checkpoint files have been preserved.';
+      return null;
     }
   }
 
   Future<ScanCheckpoint> begin({required int? year,
       required bool people, required int total}) async {
     final old = current ?? await load();
+    if (recoveryIssue != null) {
+      throw StateError('Cannot overwrite an unreadable scan checkpoint. '
+          '$recoveryIssue Use History & storage to inspect the folder.');
+    }
     if (old != null && old.year == year && old.people == people) {
       // A new/deleted asset changes the library size, not the validity
       // of previously analyzed stable PhotoKit IDs.
@@ -210,6 +224,7 @@ class ScanCheckpointStore {
     await _pendingAppend;
     if (current != null) { await finish('discarded'); }
     current = null;
+    recoveryIssue = null;
     if (await _journal.exists()) { await _journal.delete(); }
     if (await _state.exists()) { await _state.delete(); }
   }

@@ -47,6 +47,30 @@ class InstallMenuBarTests(unittest.TestCase):
             self.assertIn('return false', delegate.read_text())
             self.assertFalse(installer.keep_running_on_last_window_close(delegate))
 
+    def test_command_q_hides_and_explicit_quit_is_allowed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            delegate = Path(temporary) / "AppDelegate.swift"
+            delegate.write_text(
+                "import Cocoa\nclass AppDelegate: FlutterAppDelegate {\n"
+                "  override func applicationShouldTerminateAfterLastWindowClosed("
+                "_ sender: NSApplication) -> Bool {\n    return true\n  }\n}\n"
+            )
+            self.assertTrue(installer.keep_running_on_last_window_close(delegate))
+            self.assertTrue(installer.install_quit_policy(delegate))
+            content = delegate.read_text()
+            self.assertIn("override func applicationShouldTerminate(", content)
+            self.assertIn("tray.hideToMenuBar()", content)
+            self.assertIn("return .terminateCancel", content)
+            self.assertIn("tray.allowsTermination", content)
+            self.assertIn("return .terminateNow", content)
+            self.assertFalse(installer.install_quit_policy(delegate))
+            self.assertEqual(content, delegate.read_text())
+            self.assertIn("func quitCompletely()", installer.SWIFT)
+            self.assertIn("quittingCompletely = true", installer.SWIFT)
+            self.assertIn("quitCompletely()", installer.SWIFT)
+            self.assertNotIn('if command == "quit" {\n      NSApp.terminate(nil)',
+                             installer.SWIFT)
+
 
 if __name__ == "__main__":
     unittest.main()
