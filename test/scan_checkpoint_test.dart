@@ -83,6 +83,35 @@ void main() {
     expect((await restarted.load())!.rows.keys, {'survivor'});
   });
 
+  test('Scan again starts a new journal but retains completed history',
+      () async {
+    final store = await ScanCheckpointStore.open(folder: folder);
+    final previous = await store.begin(year: null, people: false, total: 2);
+    await store.append([
+      const ScanRow('old-photo', 2026, 1280, 720),
+      const ScanRow('other-photo', 2026, 1280, 720),
+    ], mode: 'balanced', elapsedMs: 1000, cpu: 20, ram: 110);
+    await store.finish('complete');
+    expect(previous.complete, isTrue);
+    final originalStart = previous.started.toIso8601String();
+
+    final fresh = await store.begin(
+      year: null, people: false, total: 2, forceFresh: true);
+    expect(identical(fresh, previous), isFalse);
+    expect(fresh.complete, isFalse);
+    expect(fresh.visited, 0);
+    expect(fresh.analyzed, 0);
+    expect((await store.readHistory()).single['start'], originalStart);
+    expect((await store.readHistory()).single['status'], 'complete');
+
+    await store.append([const ScanRow('new-photo', 2026, 720, 1280)],
+      mode: 'eco', elapsedMs: 100, cpu: 3, ram: 60);
+    final restarted = await ScanCheckpointStore.open(folder: folder);
+    final reloaded = await restarted.load();
+    expect(reloaded!.rows.keys, {'new-photo'});
+    expect((await restarted.readHistory()).single['status'], 'complete');
+  });
+
   test('discard waits for pending checkpoint writes', () async {
     final store = await ScanCheckpointStore.open(folder: folder);
     await store.begin(year: null, people: false, total: 100);
