@@ -2,12 +2,18 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cleanup_scanner.dart';
+import 'scan_checkpoint.dart';
+import 'photo_analysis.dart';
 import '../background/scan_runtime.dart';
 
 /// Lives above the library tabs: switching views does not stop the scan.
 class CleanupController extends ChangeNotifier {
   final CleanupScanner _scanner = CleanupScanner();
   final ScanRuntime performance = ScanRuntime();
+  ScanCheckpointStore? checkpointStore;
+  bool showHistory = false;
+  int get analyzedCount => result?.photos.length ?? checkpointStore?.current?.analyzed ?? 0;
+  int _baselineVisited = 0;
   static const _autoKey = 'cleanup_auto_scan_v02';
 
   CleanupScanResult? result;
@@ -67,7 +73,22 @@ class CleanupController extends ChangeNotifier {
     if (_settingsLoaded) return;
     final prefs = await SharedPreferences.getInstance();
     await performance.initialize();
+    checkpointStore ??= await ScanCheckpointStore.open();
+    final prior = await checkpointStore!.load();
     if (_disposed) return;
+    if (prior != null) {
+      year = prior.year;
+      analyzingPeople = prior.people;
+      completed = prior.complete;
+      _baselineVisited = prior.visited;
+      result = CleanupScanResult(
+        photos: const {}, groups: const CleanupGroups(
+          exact: [], similar: [], blurry: [], noPeople: []),
+        total: prior.total, visited: prior.visited,
+        skipped: prior.skipped, peopleDetectionAvailable: prior.people,
+        years: const {},
+      );
+    }
     autoScan = prefs.getBool(_autoKey) ?? true;
     _settingsLoaded = true;
     _notify();
@@ -84,8 +105,11 @@ class CleanupController extends ChangeNotifier {
   Future<void> startIfEnabled(Set<String> protectedIds) async {
     _protected = Set<String>.of(protectedIds);
     await initialize();
-    if (autoScan && !running && !completed && !_cancel) {
-      start();
+    if (autoScan && !running && !_cancel) {
+      // Restore thumbnails and resume unfinished work without re-decoding
+      // every photo previously analyzed. Completed scans hydrate the gallery.
+      start(scopeYear: checkpointStore?.current?.year,
+        people: checkpointStore?.current?.people);
     }
   }
 
@@ -93,13 +117,18 @@ class CleanupController extends ChangeNotifier {
     if (running) return;
     final generation = ++_scanGeneration;
     _cancel = false;
+    await initialize();
+    if (_disposed || generation != _scanGeneration) return;
     year = scopeYear;
     analyzingPeople = people ?? analyzingPeople;
+    _baselineVisited = checkpointStore?.current?.year == year &&
+            checkpointStore?.current?.people == analyzingPeople
+        ? checkpointStore?.current?.visited ?? 0 : 0;
     running = true;
     paused = false;
     completed = false;
     error = null;
-    result = null;
+    if (_baselineVisited == 0) result = null;
     _excluded.clear();
     _dismissedExact.clear();
     _dismissedSimilar.clear();
@@ -115,6 +144,7 @@ class CleanupController extends ChangeNotifier {
           }
         },
         performance: performance,
+        checkpointStore: checkpointStore!,
         protectedIds: Set<String>.of(_protected),
         year: year,
         analyzePeople: analyzingPeople,
@@ -123,10 +153,11 @@ class CleanupController extends ChangeNotifier {
           result = snapshot;
           final elapsed = DateTime.now().difference(_startedAt!);
           // Show a measured ETA only after a meaningful sample. No fake ETA.
-          if (snapshot.visited >= 40 && elapsed.inSeconds >= 2 &&
+          final added = snapshot.visited - _baselineVisited;
+          if (added >= 40 && elapsed.inSeconds >= 2 &&
               snapshot.total > snapshot.visited) {
             final remainingSeconds = elapsed.inMilliseconds /
-                snapshot.visited * (snapshot.total - snapshot.visited) / 1000;
+                added * (snapshot.total - snapshot.visited) / 1000;
             _eta = Duration(seconds: remainingSeconds.round());
           }
           _notify();
@@ -136,6 +167,7 @@ class CleanupController extends ChangeNotifier {
         result = finalResult;
         completed = true;
         _eta = null;
+        await checkpointStore?.finish('complete');
       }
     } catch (e) {
       if (!_disposed && generation == _scanGeneration && !_cancel) {
@@ -159,6 +191,17 @@ class CleanupController extends ChangeNotifier {
   void stop() {
     _cancel = true;
     paused = false;
+    checkpointStore?.finish('stopped');
+    _notify();
+  }
+
+  void toggleHistory() {
+    showHistory = !showHistory;
+    _notify();
+  }
+
+  void openHistory() {
+    showHistory = true;
     _notify();
   }
 
@@ -185,6 +228,7 @@ class CleanupController extends ChangeNotifier {
     _excluded.clear();
     _dismissedExact.clear();
     _dismissedSimilar.clear();
+    checkpointStore?.discard();
     _notify();
   }
 

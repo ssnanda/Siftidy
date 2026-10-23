@@ -6,6 +6,7 @@ import 'package:photo_manager/photo_manager.dart';
 import '../background/scan_runtime.dart';
 import '../library/library_repository.dart';
 import 'photo_analysis.dart';
+import 'scan_checkpoint.dart';
 
 class CleanupScanResult {
   const CleanupScanResult({
@@ -45,6 +46,7 @@ class CleanupScanner {
     required Future<void> Function() waitIfPaused,
     required void Function(CleanupScanResult snapshot) onProgress,
     required ScanRuntime performance,
+    required ScanCheckpointStore checkpointStore,
     Set<String> protectedIds = const {},
     int? year,
     bool analyzePeople = false,
@@ -54,6 +56,11 @@ class CleanupScanner {
     );
     final album = all.isEmpty ? null : all.first;
     final total = album == null ? 0 : await album.assetCountAsync;
+    final checkpoint = await checkpointStore.begin(
+      year: year, people: analyzePeople, total: total);
+    final restored = Map<String, ScanRow>.of(checkpoint.rows);
+    final pending = <ScanRow>[];
+    var lastSavedAt = DateTime.now();
     final scanned = <ScannedPhoto>[];
     final assets = <String, AssetEntity>{};
     final years = <int>{};
@@ -61,8 +68,8 @@ class CleanupScanner {
     final candidates = <String, AssetEntity>{};
     final positions = <String, int>{};
     final hashes = <String, String?>{};
-    var skipped = 0;
-    var visited = 0;
+    var skipped = checkpoint.skipped;
+    var visited = restored.length;
     var peopleAvailable = analyzePeople;
 
     CleanupScanResult snapshot(CleanupGroups groups) => CleanupScanResult(
@@ -76,6 +83,15 @@ class CleanupScanner {
     );
 
     Future<void> publish() async {
+      if (cancelled()) return;
+      final now = DateTime.now();
+      final elapsed = now.difference(lastSavedAt).inMilliseconds;
+      lastSavedAt = now;
+      await checkpointStore.append(List<ScanRow>.of(pending),
+        mode: performance.activeMode.name,
+        elapsedMs: elapsed,
+        cpu: performance.processCpu, ram: performance.ramMb);
+      pending.clear();
       if (cancelled()) return;
       final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
       if (!cancelled()) onProgress(snapshot(groups));
@@ -140,10 +156,29 @@ class CleanupScanner {
           final toAnalyze = <AssetEntity>[];
           for (final asset in slice) {
             if (!visitedIds.add(asset.id)) continue;
+            final cached = restored[asset.id];
+            if (cached != null) {
+              years.add(cached.year);
+              if (cached.photo != null &&
+                  !protectedIds.contains(asset.id) &&
+                  (year == null || cached.year == year)) {
+                positions[asset.id] = scanned.length;
+                scanned.add(cached.photo!);
+                assets[asset.id] = asset;
+                final f = cached.photo!.fingerprint;
+                final signature = '${asset.width}x${asset.height}:'
+                    '${f.rows.join(",")}:${f.averageRgb.join(",")}:'
+                    '${cached.photo!.isScreenshot ? sha1.convert(f.spatialLuma) : ""}';
+                candidates.putIfAbsent(signature, () => asset);
+              }
+              continue;
+            }
             visited++;
-            years.add(asset.createDateTime.year);
+            final y = asset.createDateTime.year;
+            years.add(y);
             if (protectedIds.contains(asset.id) ||
-                (year != null && asset.createDateTime.year != year)) {
+                (year != null && y != year)) {
+              pending.add(ScanRow(asset.id, y, asset.width, asset.height));
               continue;
             }
             toAnalyze.add(asset);
@@ -161,6 +196,8 @@ class CleanupScanner {
             final fingerprint = results[i].fingerprint;
             if (fingerprint == null) {
               skipped++;
+              pending.add(ScanRow(asset.id, asset.createDateTime.year,
+                  asset.width, asset.height, skipped: true));
               continue;
             }
             final signature = '${asset.width}x${asset.height}:'
@@ -182,17 +219,27 @@ class CleanupScanner {
                   hasPeople: previous.hasPeople,
                   isScreenshot: previous.isScreenshot,
                 );
+                final previousAsset = assets[peer.id];
+                if (previousAsset != null) {
+                  pending.add(ScanRow(peer.id,
+                    previousAsset.createDateTime.year,
+                    previousAsset.width, previousAsset.height,
+                    photo: scanned[index]));
+                }
               }
             }
             positions[asset.id] = scanned.length;
-            scanned.add(ScannedPhoto(
+            final analyzedPhoto = ScannedPhoto(
               id: asset.id,
               fingerprint: fingerprint,
               sha256: digest,
               hasPeople: results[i].people,
               isScreenshot: isScreenshot,
-            ));
+            );
+            scanned.add(analyzedPhoto);
             assets[asset.id] = asset;
+            pending.add(ScanRow(asset.id, asset.createDateTime.year,
+              asset.width, asset.height, photo: analyzedPhoto));
           }
         }
         await publish();
@@ -213,6 +260,7 @@ class CleanupScanner {
       }
       if (!cancelled()) await index(album);
     }
+    if (!cancelled()) await publish();
     final groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned));
     return snapshot(groups);
   }

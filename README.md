@@ -130,3 +130,29 @@ Menu-bar operation removes the window from the screen and clears the gallery's
 decoded-image cache, but the Flutter engine and the in-progress scan remain
 in memory. It is not a separate lightweight daemon. CPU and memory readings
 are for the whole Siftidy process, not an isolated worker.
+
+## Persistent scan progress, scan history & disk usage
+
+Scan progress now survives closing and quitting Siftidy, Mac restarts and
+application updates. Every completed scan batch flushes a local JSONL
+checkpoint, including the analyzed thumbnail fingerprint, image dimensions,
+verified exact-duplicate hashes when available, screenshot/people flags,
+visited/ignored/skipped PhotoKit IDs and processing metrics. Existing entries
+are reused after relaunch, without re-decoding every cached thumbnail.
+
+The data lives in the macOS app's **Application Support / ScanData** directory.
+Use **History & storage** in the Siftidy scanning screen, or **Scan history &
+storage** in the menu-bar dropdown, to see and copy its actual absolute path,
+open it in Finder, and display measured bytes for the active checkpoint,
+historical summaries, and total directory usage.
+
+The active result dataset is preserved until you start a differently scoped
+scan or click **Discard scan results**. The history records up to 30 past
+scan summaries (date, outcome, duration, visited, analyzed, skipped, rate,
+average measured process CPU, peak RAM and per-mode duration); it does not
+retain full copies of historical scan datasets. The current cache is local
+only and does not contain original/full-resolution photo files.
+
+A scan that started under **v0.2.8 or earlier cannot be resumed**, because
+those versions never wrote an on-disk scan journal. The first scan after this
+update must analyze those photos again, then it can resume after later updates.

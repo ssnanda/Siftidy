@@ -90,7 +90,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       readProgress: () => ScanProgress(
         visited: _cleanup.visited,
         total: _cleanup.total,
-        analyzed: _cleanup.result?.photos.length ?? 0,
+        analyzed: _cleanup.analyzedCount,
+        elapsedMs: _cleanup.checkpointStore?.current?.elapsedMs ?? 0,
+        photosPerMinute: _cleanup.checkpointStore?.current?.perMinute ?? 0,
         running: _cleanup.running,
         paused: _cleanup.paused,
         complete: _cleanup.completed,
@@ -118,6 +120,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
             break;
           case 'discard':
             _cleanup.discardScan();
+            break;
+          case 'history':
+            _chooseCleanup(CleanupCategory.exact);
+            _cleanup.openHistory();
             break;
           case 'windowHidden':
             // Scan keeps running; release the gallery's decoded-image cache.

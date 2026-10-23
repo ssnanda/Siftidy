@@ -45,6 +45,8 @@ class ScanProgress {
     required this.paused,
     required this.complete,
     this.eta,
+    this.elapsedMs = 0,
+    this.photosPerMinute = 0,
   });
   final int visited;
   final int total;
@@ -53,6 +55,8 @@ class ScanProgress {
   final bool paused;
   final bool complete;
   final Duration? eta;
+  final int elapsedMs;
+  final double photosPerMinute;
 }
 
 /// Platform feedback for responsible scanning, not an OS-enforced CPU quota.
@@ -215,6 +219,8 @@ class ScanRuntime extends ChangeNotifier {
         'paused': p.paused,
         'complete': p.complete,
         'etaSeconds': p.eta?.inSeconds,
+        'elapsedMs': p.elapsedMs,
+        'ratePerMinute': p.photosPerMinute,
         'baseMode': baseMode.name,
         'activeMode': activeMode.name,
         'idleTurbo': autoTurboOnIdle,

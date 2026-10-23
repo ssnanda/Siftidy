@@ -8,6 +8,7 @@ import 'cleanup_controller.dart';
 import '../background/scan_runtime.dart';
 import 'duplicate_selection.dart';
 import 'media_sizes.dart';
+import 'scan_history_view.dart';
 
 enum CleanupCategory { exact, similar, blurry, noPeople }
 
@@ -363,6 +364,12 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    if (controller.showHistory) {
+      return ScanHistoryView(
+        store: controller.checkpointStore,
+        onBack: controller.toggleHistory,
+      );
+    }
     final result = controller.result;
     final groups = _groups;
     final selectedCount = _groupMode
@@ -443,6 +450,11 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                 ),
                 TextButton(onPressed: controller.stop, child: const Text('Stop')),
               ],
+              TextButton.icon(
+                onPressed: controller.openHistory,
+                icon: const Icon(Icons.history),
+                label: const Text('History & storage'),
+              ),
               if (controller.running || controller.result != null ||
                   controller.error != null)
                 TextButton.icon(
@@ -488,9 +500,9 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
             controller.running
                 ? '${controller.visited} / ${controller.total} · '
                   '${controller.paused ? "Paused" : _etaLabel(controller.eta)} '
-                  '· ${result?.photos.length ?? 0} analyzed'
+                  '· ${controller.analyzedCount} analyzed'
                 : controller.completed
-                    ? 'Scan complete · ${result?.photos.length ?? 0} analyzed '
+                    ? 'Scan complete · ${controller.analyzedCount} analyzed '
                       '· ${result?.skipped ?? 0} unavailable'
                     : 'Scan stopped or not started.',
             style: const TextStyle(fontSize: 12),

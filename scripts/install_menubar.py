@@ -24,6 +24,9 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
   private var statusItem: NSStatusItem?
   private var menu: NSMenu?
   private var detailsItem: NSMenuItem?
+  private var progressItem: NSMenuItem?
+  private var resourcesItem: NSMenuItem?
+  private var durationItem: NSMenuItem?
   private var scanItem: NSMenuItem?
   private var pauseItem: NSMenuItem?
   private var stopItem: NSMenuItem?
@@ -88,8 +91,16 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     detailsItem = NSMenuItem(title: "Scan is idle", action: nil, keyEquivalent: "")
     detailsItem?.isEnabled = false
     if let detailsItem = detailsItem { root.addItem(detailsItem) }
+    progressItem = NSMenuItem(title: "0 scanned", action: nil, keyEquivalent: "")
+    resourcesItem = NSMenuItem(title: "CPU — · RAM —", action: nil, keyEquivalent: "")
+    durationItem = NSMenuItem(title: "Duration — · ETA —", action: nil, keyEquivalent: "")
+    for entry in [progressItem, resourcesItem, durationItem] {
+      entry?.isEnabled = false
+      if let entry = entry { root.addItem(entry) }
+    }
     root.addItem(NSMenuItem.separator())
     addItem("Open Siftidy", action: "open", to: root)
+    addItem("Scan history & storage", action: "history", to: root)
     scanItem = addItem("Start scan", action: "scan", to: root)
     pauseItem = addItem("Pause scan", action: "pause", to: root)
     stopItem = addItem("Stop scan", action: "stop", to: root)
@@ -153,6 +164,9 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     let cpuValue = data["cpu"] as? Double ?? cpu
     let ramValue = data["ramMb"] as? Double ?? 0
     let eta = data["etaSeconds"] as? Int
+    let elapsedMs = data["elapsedMs"] as? Int ?? 0
+    let rate = data["ratePerMinute"] as? Double ?? 0
+    let durationMinutes = elapsedMs / 60000
     let etaDescription = eta == nil ? "Calculating" :
                          (eta! >= 60 ? "\(eta! / 60) min" : "\(eta!) sec")
     statusItem?.button?.title = running ? "▧ \(percent)%" :
@@ -163,7 +177,11 @@ private final class SiftidyMenuBar: NSObject, NSWindowDelegate {
       "\(analyzed) analyzed · \(percent)% complete\n" +
       String(format: "CPU %.1f%% · RAM %.0f MB\n", cpuValue, ramValue) +
       "Speed: \(mode.capitalized) · ETA: \(etaDescription)"
-    detailsItem?.title = "\(state) · \(percent)% · \(analyzed) analyzed"
+    detailsItem?.title = "\(state) · \(percent)% · \(mode.capitalized)"
+    progressItem?.title = "\(visited) scanned · \(pending) pending · \(analyzed) analyzed"
+    resourcesItem?.title = String(format: "CPU %.1f%% · RAM %.0f MB", cpuValue, ramValue)
+    durationItem?.title = String(format: "Elapsed %dm · ETA %@ · %.0f/min",
+                                 durationMinutes, etaDescription, rate)
     scanItem?.isEnabled = !running
     pauseItem?.isEnabled = running
     pauseItem?.title = paused ? "Resume scan" : "Pause scan"
