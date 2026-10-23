@@ -251,6 +251,14 @@ class ScanCheckpointStore {
     await _writeState(scan);
   }
 
+  /// Remove only a historical report. Active resumable analysis is untouched.
+  Future<void> deleteHistoryEntry(String started) async {
+    await _pendingAppend;
+    final history = await readHistory();
+    history.removeWhere((item) => item['start'] == started);
+    await _atomic(_history, jsonEncode(history));
+  }
+
   Future<List<Map<String, dynamic>>> readHistory() async {
     try {
       if (!await _history.exists()) { return []; }
@@ -261,7 +269,7 @@ class ScanCheckpointStore {
 
   Future<ScanStorageInfo> usage() async {
     int bytes(File file) => file.existsSync() ? file.lengthSync() : 0;
-    final children = folder.listSync().whereType<File>();
+    final children = folder.listSync(recursive: true).whereType<File>();
     return ScanStorageInfo(
       folder.path, bytes(_state) + bytes(_journal), bytes(_history),
       children.fold<int>(0, (sum, file) => sum + bytes(file)),

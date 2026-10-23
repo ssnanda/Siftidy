@@ -15,6 +15,9 @@ import 'library_repository.dart';
 import 'scan_display.dart';
 import '../cleanup/cleanup_screen.dart';
 import '../cleanup/cleanup_controller.dart';
+import '../cleanup/scan_result_archive.dart';
+import '../dashboard/scan_dashboard.dart';
+import '../dashboard/scan_center.dart';
 import '../background/scan_runtime.dart';
 import '../cleanup/media_sizes.dart';
 import '../cleanup/deletion_stats.dart';
@@ -34,8 +37,72 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final MediaSizes _sizes = MediaSizes.instance;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _activityView = false;
+  bool _dashboardView = true;
+  bool _scanCenterView = false;
+  bool _scanSettingsView = false;
+  ScanResultSnapshot? _savedSnapshot;
   final CleanupController _cleanup = CleanupController();
   CleanupCategory? _cleanupCategory;
+
+  void _showDashboard() {
+    if (_deleting) return;
+    setState(() {
+      _dashboardView = true;
+      _scanCenterView = false;
+      _scanSettingsView = false;
+      _savedSnapshot = null;
+      _activityView = false;
+      _cleanupCategory = null;
+    });
+  }
+
+  void _showScanCenter() {
+    if (_deleting) return;
+    setState(() {
+      _dashboardView = false;
+      _scanCenterView = true;
+      _scanSettingsView = false;
+      _savedSnapshot = null;
+      _activityView = false;
+      _cleanupCategory = null;
+    });
+  }
+
+  void _showScanSettings() {
+    if (_deleting) return;
+    setState(() {
+      _dashboardView = false;
+      _scanCenterView = false;
+      _scanSettingsView = true;
+      _savedSnapshot = null;
+      _activityView = false;
+      _cleanupCategory = null;
+    });
+  }
+
+  void _showSavedSnapshot(ScanResultSnapshot snapshot) {
+    if (_deleting) return;
+    setState(() {
+      _dashboardView = false;
+      _scanCenterView = false;
+      _scanSettingsView = false;
+      _savedSnapshot = snapshot;
+      _activityView = false;
+      _cleanupCategory = null;
+    });
+  }
+
+  void _startCurrentScan() {
+    if (_cleanup.running) return;
+    if (_permission?.hasAccess != true) {
+      _reload(requestPermission: true);
+      return;
+    }
+    _cleanup.start(
+      scopeYear: _cleanup.year,
+      people: _cleanup.analyzingPeople,
+    );
+  }
 
   void _onCleanupChanged() {
     if (mounted) setState(() {});
@@ -45,6 +112,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_deleting) return;
     setState(() {
       _cleanupCategory = category;
+      _dashboardView = false;
+      _scanCenterView = false;
+      _scanSettingsView = false;
+      _savedSnapshot = null;
       _activityView = false;
       _selected.clear();
       _focusedIndex = -1;
@@ -107,15 +178,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (!mounted) return;
         switch (action) {
           case 'scan':
-            if (_permission?.hasAccess == true) {
-              _cleanup.start(
-                scopeYear: _cleanup.year,
-                people: _cleanup.analyzingPeople,
-              );
-            } else {
-              _reload(requestPermission: true);
-            }
-            _chooseCleanup(CleanupCategory.exact);
+            _startCurrentScan();
+            _showDashboard();
             break;
           case 'pause':
             _cleanup.pauseOrResume();
@@ -127,8 +191,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             _cleanup.discardScan();
             break;
           case 'history':
-            _chooseCleanup(CleanupCategory.exact);
-            _cleanup.openHistory();
+            _showScanCenter();
             break;
           case 'windowHidden':
             // Scan keeps running; release the gallery's decoded-image cache.
@@ -336,6 +399,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _filter = filter;
       _albumId = albumId;
       _cleanupCategory = null;
+      _dashboardView = false;
+      _scanCenterView = false;
+      _scanSettingsView = false;
+      _savedSnapshot = null;
       _activityView = false;
     });
     if (closeDrawer) {
@@ -401,6 +468,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_deleting) return;
     setState(() {
       _cleanupCategory = null;
+      _dashboardView = false;
+      _scanCenterView = false;
+      _scanSettingsView = false;
+      _savedSnapshot = null;
       _activityView = true;
       _selected.clear();
     });
@@ -411,6 +482,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildSidebar(BuildContext context, {bool closeDrawer = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(padding: const EdgeInsets.fromLTRB(8, 16, 8, 10), child:
+        Column(children: [
+          ListTile(
+            selected: _dashboardView,
+            selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            leading: const Icon(Icons.dashboard_outlined),
+            title: const Text('Dashboard'),
+            onTap: () {
+              _showDashboard();
+              if (closeDrawer) Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            selected: _scanCenterView,
+            selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            leading: const Icon(Icons.radar_outlined),
+            title: const Text('Scan Center'),
+            onTap: () {
+              _showScanCenter();
+              if (closeDrawer) Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            selected: _scanSettingsView,
+            selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            leading: const Icon(Icons.settings_outlined),
+            title: const Text('Scan settings'),
+            onTap: () {
+              _showScanSettings();
+              if (closeDrawer) Navigator.pop(context);
+            },
+          ),
+        ]),
+      ),
+      const Divider(height: 8),
       const Padding(padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
         child: Text('APPLE PHOTOS', style: TextStyle(
           fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
@@ -858,8 +967,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
             child: ScanProgressButton(
-              onPressed: _deleting ? null :
-                  () => _chooseCleanup(CleanupCategory.exact),
+              onPressed: _deleting ? null : _showDashboard,
               running: _cleanup.running,
               completed: _cleanup.completed,
               visited: _cleanup.visited,
@@ -867,9 +975,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ),
           if (!isWide)
-            IconButton(tooltip: 'Siftidy tools (right menu)',
-              icon: const Icon(Icons.view_sidebar_outlined),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+            IconButton(tooltip: 'Navigation',
+              icon: const Icon(Icons.menu),
+              onPressed: () => _scaffoldKey.currentState?.openDrawer()),
+          IconButton(tooltip: 'Scan settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: _showScanSettings),
           const UpdateButton(),
           IconButton(
             tooltip: 'Refresh library',
@@ -894,7 +1005,37 @@ class _LibraryScreenState extends State<LibraryScreen> {
           SizedBox(width: 230, child: _buildSidebar(context)),
           const VerticalDivider(width: 1),
         ],
-        Expanded(child: _activityView
+        Expanded(child: _dashboardView
+            ? DashboardHome(
+                controller: _cleanup,
+                onScan: _startCurrentScan,
+                onPause: _cleanup.pauseOrResume,
+                onStop: _cleanup.stop,
+                onReview: _chooseCleanup,
+                onScanCenter: _showScanCenter,
+                onSettings: _showScanSettings,
+                onOpenSnapshot: _showSavedSnapshot,
+              )
+            : _scanCenterView
+            ? ScanCenterHome(
+                controller: _cleanup,
+                onBack: _showDashboard,
+                onStart: _startCurrentScan,
+                onSettings: _showScanSettings,
+                onPause: _cleanup.pauseOrResume,
+                onStop: _cleanup.stop,
+                onReview: _chooseCleanup,
+                onOpenSnapshot: _showSavedSnapshot,
+              )
+            : _scanSettingsView
+            ? ScanSettingsHome(controller: _cleanup,
+                onBack: _showScanCenter)
+            : _savedSnapshot != null
+            ? SavedSnapshotView(
+                snapshot: _savedSnapshot!,
+                onBack: _showScanCenter,
+              )
+            : _activityView
             ? const DeletionActivityView()
             : _cleanupCategory != null
             ? CleanupWorkspace(
@@ -972,12 +1113,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: _buildContent(visible, cols),
         )),
       ])),
-        if (isWide) ...[
+        if (isWide && !_dashboardView && !_scanCenterView &&
+            !_scanSettingsView && _savedSnapshot == null) ...[
           const VerticalDivider(width: 1),
           SizedBox(width: 239, child: _buildCleanupSidebar(context)),
         ],
       ]),
-      bottomNavigationBar: _activityView || _cleanupCategory != null || _selected.isEmpty ? null : SafeArea(
+      bottomNavigationBar: _dashboardView || _scanCenterView ||
+          _scanSettingsView || _savedSnapshot != null ||
+          _activityView || _cleanupCategory != null ||
+          _selected.isEmpty ? null : SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),

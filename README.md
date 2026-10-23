@@ -177,3 +177,33 @@ When a scan is active, **Quit Completely** offers:
 - **Cancel:** continue scanning.
 
 Pause & Quit has a **20-second maximum**, after which a separate native watchdog terminates Siftidy even if the Flutter worker is hung. The last *committed* checkpoint survives a forced quit; unfinished individual operations might have to be retried. These controls never delete photos.
+
+## Dashboard, Scan Center & saved scan results
+
+Siftidy opens on a **Dashboard** with the live scan state, four cleanup result
+tiles, and **five recent scans**. The Scan percentage button returns to the
+Dashboard instead of opening Exact duplicates. Media browsing and the existing
+cleanup review pages remain available in the sidebars.
+
+**Scan Center** holds active progress, Resume/Pause/Stop, all available scan
+history, cache location and real disk usage. **Scan settings** contains the
+Minimal/Eco/Balanced/Turbo selection, timed Turbo, idle Turbo, auto scan on
+launch, next-scan year scope and people analysis. Automated time-of-day
+scheduling is a separate remaining v0.2 milestone, not represented by a fake
+switch.
+
+Each **completed scan** stores an independent read-only results snapshot in
+`ScanData/snapshots/scan-<timestamp>.json`. It contains group asset IDs and
+counts, not full-resolution images, and does **not** replace the active
+checkpoint. The five recent scan records display status, duration, visited
+photos, and (when available) all four result counts and snapshot file size.
+Saved results can be opened read-only, and individual historical records can
+be deleted after confirmation without deleting a single photo or the current
+resumable checkpoint. Older history entries that predate snapshots continue
+to display as summary-only; the application does not fabricate historical
+results.
+
+For now only **completed scans** create independent snapshot files. Paused,
+stopped, and failed runs retain their history summary and recoverable active
+checkpoint. The existing gallery-based live review continues to be the path
+for performing deliberate, confirmed PhotoKit cleanup actions.

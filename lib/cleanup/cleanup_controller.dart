@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cleanup_scanner.dart';
 import 'scan_checkpoint.dart';
+import 'scan_result_archive.dart';
 import 'photo_analysis.dart';
 import '../background/scan_runtime.dart';
 
@@ -16,6 +17,8 @@ class CleanupController extends ChangeNotifier {
   final CleanupScanner _scanner = CleanupScanner();
   final ScanRuntime performance = ScanRuntime();
   ScanCheckpointStore? checkpointStore;
+  ScanResultArchive? get archive => checkpointStore == null
+      ? null : ScanResultArchive(checkpointStore!.folder);
   bool showHistory = false;
   String? resumeStatus;
   Future<void>? _initializing;
@@ -220,6 +223,15 @@ class CleanupController extends ChangeNotifier {
         result = finalResult;
         completed = true;
         _eta = null;
+        final scan = checkpointStore?.current;
+        if (scan != null) {
+          await archive?.save(
+            started: scan.started,
+            total: scan.total,
+            analyzed: scan.analyzed,
+            groups: finalResult.groups,
+          );
+        }
         await checkpointStore?.finish('complete');
       }
     } catch (e) {
@@ -312,6 +324,14 @@ class CleanupController extends ChangeNotifier {
 
   void openHistory() {
     showHistory = true;
+    _notify();
+  }
+
+  /// These options affect the next scan, not an already-running worker.
+  void setNextScanOptions({int? scopeYear, required bool people}) {
+    if (running) { return; }
+    year = scopeYear;
+    analyzingPeople = people;
     _notify();
   }
 
