@@ -156,49 +156,74 @@ class CleanupScanner {
         reportPhase('Finding property tours');
         final candidateTours = propertySessionCandidates(scanned);
         final confirmedTours = <PropertyTourSuggestion>[];
-        // Inspect at most three representative views per session; two
-        // independent property hits are required, never time/GPS alone.
-        Future<bool> verifyTour(PropertyTourSuggestion tour) async {
-          var evidence = 0;
-          final ids = tour.ids;
-          final sampleIndices = <int>{0, ids.length ~/ 2, ids.length - 1};
-          for (final index in sampleIndices) {
-            if (cancelled()) { break; }
-            await waitIfPaused();
-            final asset = assets[ids[index]];
-            if (asset == null) { continue; }
-            try {
-              final bytes = await asset.thumbnailDataWithSize(
-                const ThumbnailSize(256, 256),
-                format: ThumbnailFormat.jpeg, quality: 75,
-              ).timeout(const Duration(seconds: 12));
-              if (bytes == null) { continue; }
-              final yes = await _vision.invokeMethod<bool>(
-                  'propertyEvidence', bytes)
-                  .timeout(const Duration(seconds: 8));
-              if (yes == true) {
-                evidence++;
-                if (evidence >= 2) { return true; }
-              }
-            } catch (_) {
-              // Missing/unavailable image evidence is not a positive.
-            }
+        // First cheaply sample each session to avoid full-library Vision
+        // passes over birthdays, vacations, and other unrelated sequences.
+        // Promising tours then get checked *frame by frame*: nobody may
+        // appear in an included photo, and time/location alone never qualify.
+        final checked = <String, PropertySceneKind>{};
+        Future<PropertySceneKind> inspect(String id) async {
+          final cached = checked[id];
+          if (cached != null) { return cached; }
+          if (cancelled()) { return PropertySceneKind.unknown; }
+          await waitIfPaused();
+          final asset = assets[id];
+          if (asset == null) { return PropertySceneKind.unknown; }
+          try {
+            final bytes = await asset.thumbnailDataWithSize(
+              const ThumbnailSize(288, 288),
+              format: ThumbnailFormat.jpeg, quality: 78,
+            ).timeout(const Duration(seconds: 12));
+            if (bytes == null) { return PropertySceneKind.unknown; }
+            final code = await _vision.invokeMethod<int>(
+              'propertyScene', bytes).timeout(const Duration(seconds: 12));
+            final kind = switch (code) {
+              1 => PropertySceneKind.property,
+              2 => PropertySceneKind.people,
+              3 => PropertySceneKind.neutralInterior,
+              0 => PropertySceneKind.notProperty,
+              _ => PropertySceneKind.unknown,
+            };
+            checked[id] = kind;
+            return kind;
+          } catch (_) {
+            checked[id] = PropertySceneKind.unknown;
+            return PropertySceneKind.unknown;
           }
-          return false;
         }
 
-        const parallelTours = 4;
-        for (var start = 0; start < candidateTours.length && !cancelled();
-            start += parallelTours) {
+        const parallelPhotos = 6;
+        for (var sessionIndex = 0;
+            sessionIndex < candidateTours.length && !cancelled();
+            sessionIndex++) {
           await waitIfPaused();
-          reportPhase('Checking property tours: '
-              '${start.clamp(0, candidateTours.length)} / '
+          final tour = candidateTours[sessionIndex];
+          reportPhase('Checking property tours: ${sessionIndex + 1} / '
               '${candidateTours.length} candidate sessions');
-          final batch = candidateTours.skip(start).take(parallelTours).toList();
-          final matches = await Future.wait(batch.map(verifyTour));
-          for (var i = 0; i < batch.length; i++) {
-            if (matches[i]) { confirmedTours.add(batch[i]); }
+          final ids = tour.ids;
+          final samplePositions = <int>{
+            0, ids.length ~/ 4, ids.length ~/ 2,
+            ids.length * 3 ~/ 4, ids.length - 1,
+          };
+          final sample = await Future.wait(samplePositions.map(
+              (index) => inspect(ids[index])));
+          final strong = sample.where(
+              (kind) => kind == PropertySceneKind.property).length;
+          final possible = sample.where((kind) =>
+              kind == PropertySceneKind.property ||
+              kind == PropertySceneKind.neutralInterior).length;
+          if (strong < 2 || possible < 3) { continue; }
+
+          // No artificial maximum tour length or 90-minute total cap.
+          // A candidate may contain hundreds of frames if it really is
+          // one uninterrupted visit. Every included frame is inspected.
+          for (var offset = 0; offset < ids.length && !cancelled();
+              offset += parallelPhotos) {
+            await waitIfPaused();
+            final batch = ids.skip(offset).take(parallelPhotos).toList();
+            await Future.wait(batch.map(inspect));
           }
+          if (cancelled()) { break; }
+          confirmedTours.addAll(confirmedPropertyTourRuns(tour, checked));
         }
         if (!cancelled()) {
           groups = groups.withPropertyTours(confirmedTours);
