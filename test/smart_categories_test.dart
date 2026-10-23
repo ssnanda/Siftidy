@@ -82,6 +82,126 @@ void main() {
     ]), isEmpty);
   });
 
+  test('A property tour keeps every photo even after 100 and 90 minutes', () {
+    final photos = [
+      for (var i = 0; i < 180; i++)
+        photo('room-$i', i * 2, latitude: 35.3501, longitude: -80.8301),
+    ];
+    final candidates = propertySessionCandidates(photos);
+    expect(candidates, hasLength(1));
+    expect(candidates.single.ids, hasLength(180));
+    expect(candidates.single.ids.first, 'room-0');
+    expect(candidates.single.ids.last, 'room-179');
+    final classified = confirmedPropertyTourRuns(candidates.single, {
+      for (final item in candidates.single.ids)
+        item: item.endsWith('0')
+            ? PropertySceneKind.neutralInterior
+            : PropertySceneKind.property,
+    });
+    expect(classified, hasLength(1));
+    expect(classified.single.ids, hasLength(180));
+  });
+
+  test('Event pictures containing people never become property tours', () {
+    final tour = PropertyTourSuggestion(
+      startedAtMs: 1000,
+      ids: ['event-1', 'event-2', 'event-3', 'event-4',
+            'event-5', 'event-6'],
+    );
+    final result = confirmedPropertyTourRuns(tour, {
+      for (final id in tour.ids) id: PropertySceneKind.people,
+    });
+    expect(result, isEmpty);
+  });
+
+  test('A person/event frame separates home visits without joining them',
+      () {
+    final ids = [
+      for (var i = 0; i < 9; i++) 'house-$i',
+      'person-at-event',
+      for (var i = 9; i < 15; i++) 'house-$i',
+    ];
+    final candidate = PropertyTourSuggestion(
+        ids: ids, startedAtMs: 1000);
+    final results = confirmedPropertyTourRuns(candidate, {
+      for (final id in ids)
+        id: id == 'person-at-event'
+            ? PropertySceneKind.people
+            : PropertySceneKind.property,
+    });
+    expect(results, hasLength(2));
+    expect(results.first.ids, hasLength(9));
+    expect(results.last.ids, hasLength(6));
+    expect(results.expand((tour) => tour.ids),
+        isNot(contains('person-at-event')));
+  });
+
+  test('Neutral closet and hallway views stay in the complete home tour',
+      () {
+    const candidate = PropertyTourSuggestion(
+      ids: ['closet', 'bedroom', 'hallway', 'bathroom',
+            'second-bedroom', 'second-closet'],
+      startedAtMs: 1000,
+    );
+    final found = confirmedPropertyTourRuns(candidate, {
+      'closet': PropertySceneKind.property,
+      'bedroom': PropertySceneKind.property,
+      'hallway': PropertySceneKind.neutralInterior,
+      'bathroom': PropertySceneKind.property,
+      'second-bedroom': PropertySceneKind.property,
+      'second-closet': PropertySceneKind.neutralInterior,
+    });
+    expect(found, hasLength(1));
+    expect(found.single.ids, candidate.ids);
+  });
+
+  test('Non-property scenes split a tour, not just photos with people', () {
+    const candidate = PropertyTourSuggestion(
+      ids: ['room1', 'room2', 'room3', 'room4', 'room5',
+            'party', 'room6', 'room7', 'room8', 'room9', 'room10'],
+      startedAtMs: 1000,
+    );
+    final found = confirmedPropertyTourRuns(candidate, {
+      for (final id in candidate.ids)
+        id: id == 'party'
+            ? PropertySceneKind.notProperty
+            : PropertySceneKind.property,
+    });
+    expect(found.map((tour) => tour.ids.length), [5, 5]);
+    expect(found.expand((tour) => tour.ids), isNot(contains('party')));
+  });
+
+  test('Unverified or predominantly generic indoor scenes do not qualify',
+      () {
+    const candidate = PropertyTourSuggestion(
+      ids: ['a', 'b', 'c', 'd', 'e', 'f'],
+      startedAtMs: 1000,
+    );
+    expect(confirmedPropertyTourRuns(candidate, {
+      for (final id in candidate.ids)
+        id: PropertySceneKind.neutralInterior,
+    }), isEmpty);
+    expect(confirmedPropertyTourRuns(candidate, {
+      'a': PropertySceneKind.property,
+      'b': PropertySceneKind.property,
+      'c': PropertySceneKind.unknown,
+      'd': PropertySceneKind.property,
+      'e': PropertySceneKind.property,
+      'f': PropertySceneKind.property,
+    }), isEmpty);
+  });
+
+  test('Screenshot suggestions expose consistent review subcategories', () {
+    expect(screenshotKindForReason('Possible lock-screen capture'),
+        ScreenshotSuggestionKind.lockScreens);
+    expect(screenshotKindForReason('Almost blank dark screenshot'),
+        ScreenshotSuggestionKind.blankScreens);
+    expect(screenshotKindForReason('Repeated screenshot within 90 seconds'),
+        ScreenshotSuggestionKind.repeatedScreens);
+    expect(screenshotKindForReason('Unknown suggestion'),
+        ScreenshotSuggestionKind.other);
+  });
+
   test('Missing GPS remains unassigned and never invents an address', () {
     final tours = propertySessionCandidates([
       for (var i = 0; i < 5; i++) photo('interior$i', i),
