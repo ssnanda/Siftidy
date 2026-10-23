@@ -218,11 +218,13 @@ class RecentScanRuns extends StatefulWidget {
 class _RecentScanRunsState extends State<RecentScanRuns> {
   late Future<_HistoryData> _data;
   bool _wasCompleted = false;
+  bool _wasRunning = false;
 
   @override
   void initState() {
     super.initState();
     _wasCompleted = widget.controller.completed;
+    _wasRunning = widget.controller.running;
     _refresh();
   }
 
@@ -241,9 +243,13 @@ class _RecentScanRunsState extends State<RecentScanRuns> {
   @override
   void didUpdateWidget(covariant RecentScanRuns oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.controller.completed && !_wasCompleted) {
+    // A stopped or interrupted scan has a new history entry even when it
+    // never reaches Completed. Refresh after any running -> idle transition.
+    if ((_wasRunning && !widget.controller.running) ||
+        (widget.controller.completed && !_wasCompleted)) {
       _refresh();
     }
+    _wasRunning = widget.controller.running;
     _wasCompleted = widget.controller.completed;
   }
 
