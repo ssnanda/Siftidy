@@ -29,6 +29,55 @@ String scanFileSize(int value) {
   return '${(value / 1048576).toStringAsFixed(1)} MB';
 }
 
+/// Dashboard tiles represent actionable suggestions only, never unrun or
+/// empty categories. More categories appear automatically when scans find them.
+typedef DashboardSuggestion = ({
+  CleanupCategory category,
+  int count,
+  String description,
+});
+
+List<DashboardSuggestion> visibleDashboardSuggestions(
+    CleanupController controller) => [
+  if (controller.exactCount > 0)
+    (category: CleanupCategory.exact, count: controller.exactCount,
+      description: 'Possible identical copies · review safely'),
+  if (controller.similarCount > 0)
+    (category: CleanupCategory.similar, count: controller.similarCount,
+      description: 'Visually related photos to compare'),
+  if (controller.blurry.isNotEmpty)
+    (category: CleanupCategory.blurry, count: controller.blurry.length,
+      description: 'Review images that may be out of focus'),
+  if (controller.result?.peopleDetectionAvailable == true &&
+      controller.analyzingPeople && controller.noPeople.isNotEmpty)
+    (category: CleanupCategory.noPeople, count: controller.noPeople.length,
+      description: 'Photos without a detected person · review only'),
+  if (controller.result?.smartAnalyzed == true &&
+      controller.accidentalScreenshots.isNotEmpty)
+    (category: CleanupCategory.accidental,
+      count: controller.accidentalScreenshots.length,
+      description: 'Lock screens, empty or repeated captures · review'),
+  if (controller.result?.smartAnalyzed == true &&
+      controller.propertyTours.isNotEmpty)
+    (category: CleanupCategory.propertyTours,
+      count: controller.propertyTours.length,
+      description: 'Home photo sequences · group by location or address'),
+];
+
+/// History is a factual scan record; suppress empty/unavailable findings
+/// without hiding the scan itself or its stored file size.
+List<String> positiveScanResultLabels(ScanResultSnapshot snapshot) => [
+  if (snapshot.exactCount > 0) 'Exact ${snapshot.exactCount}',
+  if (snapshot.similarCount > 0) 'Similar ${snapshot.similarCount}',
+  if (snapshot.blurryCount > 0) 'Blurry ${snapshot.blurryCount}',
+  if (snapshot.noPeopleCount > 0) 'Scenes ${snapshot.noPeopleCount}',
+  if (snapshot.smartAnalyzed &&
+      snapshot.groups.accidentalScreenshots.isNotEmpty)
+    'Screenshots ${snapshot.groups.accidentalScreenshots.length}',
+  if (snapshot.smartAnalyzed && snapshot.groups.propertyTours.isNotEmpty)
+    'Tours ${snapshot.groups.propertyTours.length}',
+];
+
 class DashboardHome extends StatelessWidget {
   const DashboardHome({
     super.key,
@@ -184,36 +233,20 @@ class DashboardHome extends StatelessWidget {
       ]),
       const SizedBox(height: 9),
       LayoutBuilder(builder: (context, constraints) {
+        final suggestions = visibleDashboardSuggestions(controller);
+        if (suggestions.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('No review suggestions yet.'),
+          );
+        }
         final twoColumns = constraints.maxWidth >= 660;
         final tileWidth = twoColumns
             ? (constraints.maxWidth - 14) / 2 : constraints.maxWidth;
         return Wrap(spacing: 14, runSpacing: 14, children: [
-          _resultTile(context, tileWidth, CleanupCategory.exact,
-            '${controller.exactCount}', 'Possible identical copies · review safely'),
-          _resultTile(context, tileWidth, CleanupCategory.similar,
-            '${controller.similarCount}', 'Visually related photos to compare'),
-          _resultTile(context, tileWidth, CleanupCategory.blurry,
-            '${controller.blurry.length}', 'Review images that may be out of focus'),
-          _resultTile(context, tileWidth, CleanupCategory.noPeople,
-            controller.result?.peopleDetectionAvailable == true &&
-                    controller.analyzingPeople
-                ? '${controller.noPeople.length}' : '—',
-            controller.result?.peopleDetectionAvailable == true &&
-                    controller.analyzingPeople
-                ? 'Photos without a detected person · review only'
-                : 'Not analyzed · enable people/scene analysis in settings'),
-          _resultTile(context, tileWidth, CleanupCategory.accidental,
-            controller.result?.smartAnalyzed == true
-                ? '${controller.accidentalScreenshots.length}' : '—',
-            controller.result?.smartAnalyzed == true
-                ? 'Lock screens, empty or repeated captures · review'
-                : 'Run the v0.3 smart scan to analyze screenshots'),
-          _resultTile(context, tileWidth, CleanupCategory.propertyTours,
-            controller.result?.smartAnalyzed == true
-                ? '${controller.propertyTours.length}' : '—',
-            controller.result?.smartAnalyzed == true
-                ? 'Home photo sequences · group by location or address'
-                : 'Run the v0.3 smart scan for property sequences'),
+          for (final suggestion in suggestions)
+            _resultTile(context, tileWidth, suggestion.category,
+              '${suggestion.count}', suggestion.description),
         ]);
       }),
       if (controller.running) const Padding(
@@ -404,13 +437,10 @@ class _RecentScanRunsState extends State<RecentScanRuns> {
                             '${scanDuration(
                               (record['elapsedMs'] as num?)?.toInt() ?? 0)}'),
                           if (snapshot != null)
-                            Text('Exact ${snapshot.exactCount} · '
-                              'Similar ${snapshot.similarCount} · '
-                              'Blurry ${snapshot.blurryCount} · '
-                              'Scenes ${snapshot.scenesCountLabel} · '
-                              'Screenshots ${snapshot.smartAnalyzed ? snapshot.groups.accidentalScreenshots.length.toString() : "—"} · '
-                              'Tours ${snapshot.smartAnalyzed ? snapshot.groups.propertyTours.length.toString() : "—"} · '
-                              '${scanFileSize(snapshot.bytes)}',
+                            Text([
+                              ...positiveScanResultLabels(snapshot),
+                              scanFileSize(snapshot.bytes),
+                            ].join(' · '),
                               style: const TextStyle(fontSize: 12)),
                           if (snapshot == null)
                             const Text('Summary only · no saved result snapshot',
