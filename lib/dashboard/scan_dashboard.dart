@@ -141,13 +141,19 @@ class DashboardHome extends StatelessWidget {
             ? (constraints.maxWidth - 14) / 2 : constraints.maxWidth;
         return Wrap(spacing: 14, runSpacing: 14, children: [
           _resultTile(context, tileWidth, CleanupCategory.exact,
-            controller.exactCount, 'Possible identical copies · review safely'),
+            '${controller.exactCount}', 'Possible identical copies · review safely'),
           _resultTile(context, tileWidth, CleanupCategory.similar,
-            controller.similarCount, 'Visually related photos to compare'),
+            '${controller.similarCount}', 'Visually related photos to compare'),
           _resultTile(context, tileWidth, CleanupCategory.blurry,
-            controller.blurry.length, 'Review images that may be out of focus'),
+            '${controller.blurry.length}', 'Review images that may be out of focus'),
           _resultTile(context, tileWidth, CleanupCategory.noPeople,
-            controller.noPeople.length, 'Review images without detected people'),
+            controller.result?.peopleDetectionAvailable == true &&
+                    controller.analyzingPeople
+                ? '${controller.noPeople.length}' : '—',
+            controller.result?.peopleDetectionAvailable == true &&
+                    controller.analyzingPeople
+                ? 'Photos without a detected person · review only'
+                : 'Not analyzed · enable people/scene analysis in settings'),
         ]);
       }),
       if (controller.running) const Padding(
@@ -162,7 +168,7 @@ class DashboardHome extends StatelessWidget {
   }
 
   Widget _resultTile(BuildContext context, double width,
-      CleanupCategory category, int count, String description) {
+      CleanupCategory category, String count, String description) {
     final colors = Theme.of(context).colorScheme;
     return SizedBox(width: width, child: Card(
       margin: EdgeInsets.zero, clipBehavior: Clip.antiAlias,
@@ -184,7 +190,7 @@ class DashboardHome extends StatelessWidget {
             )),
             const SizedBox(width: 10),
             Column(children: [
-              Text('$count', style: Theme.of(context).textTheme.headlineSmall
+              Text(count, style: Theme.of(context).textTheme.headlineSmall
                   ?.copyWith(fontWeight: FontWeight.bold)),
               const Text('Review', style: TextStyle(fontSize: 12)),
             ]),
@@ -336,7 +342,7 @@ class _RecentScanRunsState extends State<RecentScanRuns> {
                             Text('Exact ${snapshot.exactCount} · '
                               'Similar ${snapshot.similarCount} · '
                               'Blurry ${snapshot.blurryCount} · '
-                              'No people ${snapshot.noPeopleCount} · '
+                              'Scenes ${snapshot.scenesCountLabel} · '
                               '${scanFileSize(snapshot.bytes)}',
                               style: const TextStyle(fontSize: 12)),
                           if (snapshot == null)
