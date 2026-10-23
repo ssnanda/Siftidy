@@ -80,6 +80,12 @@ PhotoFingerprint? fingerprintThumbnail(Uint8List bytes) {
   );
 }
 
+/// Analyze a bounded thumbnail batch in one isolate rather than spawning an
+/// isolate for each individual Photos asset. A null thumbnail is an
+/// unavailable asset, not a blank or blurry photo.
+List<PhotoFingerprint?> fingerprintThumbnailBatch(List<Uint8List?> bytes) =>
+    [for (final item in bytes) item == null ? null : fingerprintThumbnail(item)];
+
 double _luma(img.Pixel p) =>
     0.2126 * p.r.toDouble() + 0.7152 * p.g.toDouble() + 0.0722 * p.b.toDouble();
 
