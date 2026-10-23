@@ -18,6 +18,18 @@ Siftidy is a **macOS-only**, privacy-first personal media cleanup app. The prior
 
 **Finish reliability before adding new detection features.**
 
+### Implementation and verification sequence
+
+1. **Scan engine reliability** — prove that scanning advances, pause/resume works, graceful quit saves checkpoints, and relaunch/update resumes actual processing without restarting completed analysis.
+2. **Performance and background operation** — profile Minimal/Eco/Balanced/Turbo, bounded parallelism, resource use, responsive menu-bar operation and consistent status indicators.
+3. **Scheduling and automation** — configurable scan schedules, idle/AC constraints and appropriate behavior through sleep, wake and interruption.
+4. **Storage, metrics and history** — validate checkpoint integrity, recovery from partial writes, cache size/path, scan histories, durations, throughput and safe discard.
+5. **End-to-end operational testing** — run the entire personal photo library, including interruptions and full quits; confirm no data loss or accidental deletion.
+6. **Result validation — final v0.2 phase** — inspect exact-duplicate, similar, blurry and no-people results against selected real examples; verify saved results after reopening and test false positives/false negatives and Keep All/dismiss/keeper protection. Only tackle correctness defects and safety issues in v0.2; more sophisticated classification/ranking remains in v0.4.
+
+The last phase may use **Claude or Codex** to inspect user-selected example images, expected/actual groups, and scanner code. Build a small opt-in reference set with examples of correct groups and false positives (especially visually similar people photos and mostly-white screenshots). Keep sensitive screenshots and family photos private by default; never upload personal images to GitHub or external tools automatically. All existing scan results remain review-first, with no automatic deletion.
+
+
 - Keep scans running in the macOS menu bar when the window is closed or hidden with ⌘Q; make **Quit Completely** explicit.
 - Recover scan progress, analyzed items and results from on-device checkpoints after a full quit, restart, or app update, including when the Photos library changes.
 - Keep scan percentages and Running/Paused/Stopped/Completed status consistent between the window and menu bar.
@@ -26,7 +38,7 @@ Siftidy is a **macOS-only**, privacy-first personal media cleanup app. The prior
 - Provide an inspectable local scan-data folder, actual cache size and safe **Discard scan results** behavior without modifying photos.
 - Handle failed/interrupted scans, stale or corrupt checkpoints, partial writes and performance limits without silent resets.
 
-**0.2 completion criterion:** A long Photos scan can be interrupted, resumed, accelerated, inspected and safely discarded with predictable results, and its state is clear across the main window and menu bar.
+**0.2 completion criterion:** A long Photos scan can be interrupted, resumed, accelerated, inspected and safely discarded with predictable results; its state is clear across the main window and menu bar; and final user-reviewed result validation confirms reliable, safe baseline outputs. Refinements beyond baseline correctness belong to later versions.
 
 Existing exact-duplicate, similar-photo, blurry-photo and people-detection *review tools* are retained; substantial new intelligence in these tools is not the primary focus of 0.2.
 
