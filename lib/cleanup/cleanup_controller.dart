@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cleanup_scanner.dart';
@@ -23,6 +24,7 @@ class CleanupController extends ChangeNotifier {
   String? resumeStatus;
   Future<void>? _initializing;
   int get analyzedCount {
+    if (preparingFresh) return 0;
     final current = result?.photos.length ?? 0;
     final saved = checkpointStore?.current?.analyzed ?? 0;
     return current > saved ? current : saved;
@@ -39,6 +41,9 @@ class CleanupController extends ChangeNotifier {
   bool autoScan = true;
   bool analyzingPeople = false;
   bool running = false;
+  bool starting = false;
+  bool preparingFresh = false;
+  bool get busy => running || starting;
   bool paused = false;
   bool completed = false;
   int? year;
@@ -58,12 +63,14 @@ class CleanupController extends ChangeNotifier {
   // Keep the recovered count visible while the scanner is rebuilding result
   // groups. A new session must not display zero after restoring its journal.
   int get visited {
+    if (preparingFresh) return 0;
     final saved = checkpointStore?.current?.visited ?? 0;
     final shown = result?.visited ?? 0;
     return shown > saved ? shown : saved;
   }
   int get total => result?.total ?? checkpointStore?.current?.total ?? 0;
-  double get fraction => total == 0 ? 0 : (visited / total).clamp(0.0, 1.0);
+  double get fraction => preparingFresh || total == 0
+      ? 0 : (visited / total).clamp(0.0, 1.0);
   Duration? get eta => _eta;
   int get exactCount =>
       exact.fold(0, (n, group) => n + (group.length - 1));
@@ -107,8 +114,10 @@ class CleanupController extends ChangeNotifier {
       error = checkpointStore!.recoveryIssue;
     }
     if (prior != null) {
-      resumeStatus = 'Restored ${prior.visited} previously scanned photos '
-          'from the local checkpoint.';
+      resumeStatus = prior.complete
+          ? null
+          : 'Restored ${prior.visited} previously scanned photos '
+              'from the local checkpoint.';
       year = prior.year;
       analyzingPeople = prior.people;
       completed = prior.complete;
@@ -117,9 +126,28 @@ class CleanupController extends ChangeNotifier {
         photos: const {}, groups: const CleanupGroups(
           exact: [], similar: [], blurry: [], noPeople: []),
         total: prior.total, visited: prior.visited,
-        skipped: prior.skipped, peopleDetectionAvailable: prior.people,
+        skipped: prior.skipped, peopleDetectionAvailable: false,
         years: const {},
       );
+      if (prior.complete) {
+        // Saved grouping files are fast to load. Do not launch another
+        // 49,000-photo restore/scan merely to populate Dashboard counts.
+        try {
+          final saved = await archive?.read(
+              'scan-${prior.started.microsecondsSinceEpoch}');
+          if (saved != null) {
+            result = CleanupScanResult(
+              photos: const {}, groups: saved.groups,
+              total: prior.total, visited: prior.visited,
+              skipped: prior.skipped,
+              peopleDetectionAvailable: saved.peopleAnalyzed == true,
+              years: const {},
+            );
+          }
+        } catch (_) {
+          // A damaged historical snapshot must not erase the checkpoint.
+        }
+      }
     }
     autoScan = prefs.getBool(_autoKey) ?? true;
     _settingsLoaded = true;
@@ -137,17 +165,36 @@ class CleanupController extends ChangeNotifier {
   Future<void> startIfEnabled(Set<String> protectedIds) async {
     _protected = Set<String>.of(protectedIds);
     await initialize();
-    if (autoScan && !running && !_cancel &&
+    if (autoScan && !busy && !_cancel &&
+        checkpointStore?.current?.complete != true &&
         checkpointStore?.recoveryIssue == null) {
-      // Restore thumbnails and resume unfinished work without re-decoding
-      // every photo previously analyzed. Completed scans hydrate the gallery.
+      // Resume incomplete work or start the first scan. Completed sessions
+      // are restored from snapshots without launching another scan.
       start(scopeYear: checkpointStore?.current?.year,
         people: checkpointStore?.current?.people);
     }
   }
 
   Future<void> start({int? scopeYear, bool? people}) async {
-    if (running) return;
+    if (busy) return;
+    starting = true;
+    _notify();
+    try {
+      await _runScan(scopeYear: scopeYear, people: people);
+    } catch (e) {
+      if (!_disposed) {
+        error = '$e';
+        scanPhase = 'Unable to start scan';
+        running = false;
+        preparingFresh = false;
+      }
+    } finally {
+      starting = false;
+      _notify();
+    }
+  }
+
+  Future<void> _runScan({int? scopeYear, bool? people}) async {
     final generation = ++_scanGeneration;
     _cancel = false;
     await _discardPending;
@@ -160,13 +207,18 @@ class CleanupController extends ChangeNotifier {
     }
     year = scopeYear;
     analyzingPeople = people ?? analyzingPeople;
-    _baselineVisited = checkpointStore?.current?.year == year &&
+    // Manual Scan again must produce a new timestamp, metrics and results.
+    // The previous completed report and result file remain untouched.
+    final fresh = checkpointStore?.current?.complete == true;
+    preparingFresh = fresh;
+    _baselineVisited = fresh ? 0 : checkpointStore?.current?.year == year &&
             checkpointStore?.current?.people == analyzingPeople
         ? checkpointStore?.current?.visited ?? 0 : 0;
     running = true;
     _scanFinished = Completer<void>();
     paused = false;
-    scanPhase = _baselineVisited > 0 ? 'Restoring saved scan' : 'Preparing scan';
+    scanPhase = fresh ? 'Starting new scan' :
+        _baselineVisited > 0 ? 'Restoring saved scan' : 'Preparing scan';
     completed = false;
     error = null;
     if (_baselineVisited == 0) {
@@ -183,12 +235,15 @@ class CleanupController extends ChangeNotifier {
     _notify();
     try {
       final finalResult = await _scanner.scan(
+        forceFresh: fresh,
         cancelled: () => _cancel || _disposed || generation != _scanGeneration,
         waitIfPaused: waitWhilePaused,
         onPhase: (phase) {
-          if (!_disposed && !_cancel && generation == _scanGeneration &&
-              scanPhase != phase) {
-            scanPhase = phase;
+          if (!_disposed && !_cancel && generation == _scanGeneration) {
+            preparingFresh = false;
+            if (scanPhase != phase) {
+              scanPhase = phase;
+            }
             _notify();
           }
         },
@@ -221,7 +276,6 @@ class CleanupController extends ChangeNotifier {
       );
       if (!_disposed && !_cancel && generation == _scanGeneration) {
         result = finalResult;
-        completed = true;
         _eta = null;
         final scan = checkpointStore?.current;
         if (scan != null) {
@@ -235,6 +289,7 @@ class CleanupController extends ChangeNotifier {
           );
         }
         await checkpointStore?.finish('complete');
+        completed = true;
       }
     } catch (e) {
       if (!_disposed && generation == _scanGeneration && !_cancel) {
@@ -242,6 +297,17 @@ class CleanupController extends ChangeNotifier {
       }
     } finally {
       if (!_disposed && generation == _scanGeneration) {
+        // History is recorded only after the scanner flushed its journal.
+        // An interrupted fresh run must never overwrite an older completed
+        // session's record.
+        if (!completed && checkpointStore?.current?.complete != true) {
+          try {
+            await checkpointStore?.finish(_cancel ? 'stopped' : 'failed');
+          } catch (e) {
+            error ??= 'Could not save scan history: $e';
+          }
+        }
+        preparingFresh = false;
         running = false;
         paused = false;
         scanPhase = error == null
@@ -315,7 +381,6 @@ class CleanupController extends ChangeNotifier {
     paused = false;
     _releasePausedWorker();
     scanPhase = 'Stopping';
-    checkpointStore?.finish('stopped');
     _notify();
   }
 
