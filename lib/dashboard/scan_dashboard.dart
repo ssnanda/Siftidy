@@ -154,8 +154,7 @@ class DashboardHome extends StatelessWidget {
               const SizedBox(height: 8),
               Text(controller.paused ? 'Paused — saved work is retained'
                   : finalizing
-                      ? 'All photos indexed. Organizing the results before '
-                          'the scan is marked complete.'
+                      ? 'All photos indexed · ${controller.scanPhase}'
                       : controller.scanPhase),
             ],
             if (controller.error != null) ...[
