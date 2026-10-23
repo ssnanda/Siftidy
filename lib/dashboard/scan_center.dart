@@ -137,6 +137,12 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
     CleanupCategory.noPeople => [
       for (final id in widget.snapshot.groups.noPeople) [id],
     ],
+    CleanupCategory.accidental => [
+      for (final id in widget.snapshot.groups.accidentalScreenshots) [id],
+    ],
+    CleanupCategory.propertyTours => [
+      for (final tour in widget.snapshot.groups.propertyTours) tour.ids,
+    ],
   };
 
   @override
@@ -145,7 +151,7 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
     return Column(children: [
       Padding(padding: const EdgeInsets.all(18), child: Row(children: [
         IconButton(onPressed: widget.onBack,
-          icon: const Icon(Icons.arrow_back), tooltip: 'Back to Scan Center'),
+          icon: const Icon(Icons.arrow_back), tooltip: 'Dashboard'),
         const SizedBox(width: 8),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -169,6 +175,10 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
                     CleanupCategory.similar => item.similarCount,
                     CleanupCategory.blurry => item.blurryCount,
                     CleanupCategory.noPeople => item.scenesCountLabel,
+                    CleanupCategory.accidental => item.smartAnalyzed
+                        ? item.groups.accidentalScreenshots.length : '—',
+                    CleanupCategory.propertyTours => item.smartAnalyzed
+                        ? item.groups.propertyTours.length : '—',
                   }}'),
                 selected: _category == category,
                 onSelected: (_) => setState(() => _category = category),
@@ -186,10 +196,12 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
               return Card(child: Padding(padding: const EdgeInsets.all(12),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_category == CleanupCategory.exact ||
-                      _category == CleanupCategory.similar
-                        ? 'Group ${index + 1} · ${ids.length} photos'
-                        : 'Photo ${index + 1}',
+                    Text(_category == CleanupCategory.propertyTours
+                        ? 'Property tour ${index + 1} · ${ids.length} photos'
+                        : _category == CleanupCategory.exact ||
+                          _category == CleanupCategory.similar
+                            ? 'Group ${index + 1} · ${ids.length} photos'
+                            : 'Photo ${index + 1}',
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Wrap(spacing: 8, runSpacing: 8, children: [
