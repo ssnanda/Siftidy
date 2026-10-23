@@ -40,6 +40,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   bool _dashboardView = true;
   bool _scanCenterView = false;
   bool _scanSettingsView = false;
+  bool _settingsReturnToDashboard = false;
   ScanResultSnapshot? _savedSnapshot;
   final CleanupController _cleanup = CleanupController();
   CleanupCategory? _cleanupCategory;
@@ -70,6 +71,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   void _showScanSettings() {
     if (_deleting) return;
+    if (!_scanSettingsView) {
+      _settingsReturnToDashboard = _dashboardView;
+    }
     setState(() {
       _dashboardView = false;
       _scanCenterView = false;
@@ -390,9 +394,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return _filter.label;
   }
 
+  bool get _showingLibraryView => !_dashboardView && !_scanCenterView &&
+      !_scanSettingsView && _savedSnapshot == null && !_activityView &&
+      _cleanupCategory == null;
+
   void _chooseView(MediaFilter filter, {String? albumId, bool closeDrawer = false}) {
     if (_deleting ||
-        (_cleanupCategory == null && _filter == filter && _albumId == albumId)) {
+        (_showingLibraryView && _filter == filter && _albumId == albumId)) {
       return;
     }
     setState(() {
@@ -419,7 +427,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     String? albumId,
     bool closeDrawer = false,
   }) {
-    final selected = !_activityView && _cleanupCategory == null && _filter == filter && _albumId == albumId;
+    final selected = _showingLibraryView && _filter == filter && _albumId == albumId;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: ListTile(
@@ -1029,7 +1037,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
               )
             : _scanSettingsView
             ? ScanSettingsHome(controller: _cleanup,
-                onBack: _showScanCenter)
+                onBack: _settingsReturnToDashboard
+                    ? _showDashboard : _showScanCenter)
             : _savedSnapshot != null
             ? SavedSnapshotView(
                 snapshot: _savedSnapshot!,
