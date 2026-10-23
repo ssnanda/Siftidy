@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -38,9 +39,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _activityView = false;
   bool _dashboardView = true;
-  bool _scanCenterView = false;
   bool _scanSettingsView = false;
-  bool _settingsReturnToDashboard = false;
+  bool _showAllHistory = false;
   ScanResultSnapshot? _savedSnapshot;
   final CleanupController _cleanup = CleanupController();
   CleanupCategory? _cleanupCategory;
@@ -49,7 +49,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_deleting) return;
     setState(() {
       _dashboardView = true;
-      _scanCenterView = false;
       _scanSettingsView = false;
       _savedSnapshot = null;
       _activityView = false;
@@ -57,26 +56,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
-  void _showScanCenter() {
-    if (_deleting) return;
-    setState(() {
-      _dashboardView = false;
-      _scanCenterView = true;
-      _scanSettingsView = false;
-      _savedSnapshot = null;
-      _activityView = false;
-      _cleanupCategory = null;
-    });
+  void _showHistory() {
+    _showDashboard();
+    if (mounted) setState(() => _showAllHistory = true);
+  }
+
+  void _toggleHistory() {
+    if (!_deleting) setState(() => _showAllHistory = !_showAllHistory);
   }
 
   void _showScanSettings() {
     if (_deleting) return;
-    if (!_scanSettingsView) {
-      _settingsReturnToDashboard = _dashboardView;
-    }
     setState(() {
       _dashboardView = false;
-      _scanCenterView = false;
       _scanSettingsView = true;
       _savedSnapshot = null;
       _activityView = false;
@@ -88,7 +80,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_deleting) return;
     setState(() {
       _dashboardView = false;
-      _scanCenterView = false;
       _scanSettingsView = false;
       _savedSnapshot = snapshot;
       _activityView = false;
@@ -97,7 +88,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _startCurrentScan() {
-    if (_cleanup.running) return;
+    if (_cleanup.busy) return;
     if (_permission?.hasAccess != true) {
       _reload(requestPermission: true);
       return;
@@ -117,7 +108,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() {
       _cleanupCategory = category;
       _dashboardView = false;
-      _scanCenterView = false;
       _scanSettingsView = false;
       _savedSnapshot = null;
       _activityView = false;
@@ -127,6 +117,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (closeDrawer) {
       Navigator.pop(context);
     }
+    // A completed scan opens immediately using its saved category lists.
+    // Resolve only the selected category's PhotoKit references as needed.
+    final ids = switch (category) {
+      CleanupCategory.exact =>
+        _cleanup.exact.expand((group) => group),
+      CleanupCategory.similar =>
+        _cleanup.similar.expand((group) => group),
+      CleanupCategory.blurry => _cleanup.blurry,
+      CleanupCategory.noPeople => _cleanup.noPeople,
+    };
+    unawaited(_cleanup.restorePhotoReferences(ids));
   }
   final ScrollController _scroll = ScrollController();
   final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
@@ -195,7 +196,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             _cleanup.discardScan();
             break;
           case 'history':
-            _showScanCenter();
+            _showHistory();
             break;
           case 'windowHidden':
             // Scan keeps running; release the gallery's decoded-image cache.
@@ -394,7 +395,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return _filter.label;
   }
 
-  bool get _showingLibraryView => !_dashboardView && !_scanCenterView &&
+  bool get _showingLibraryView => !_dashboardView &&
       !_scanSettingsView && _savedSnapshot == null && !_activityView &&
       _cleanupCategory == null;
 
@@ -408,7 +409,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _albumId = albumId;
       _cleanupCategory = null;
       _dashboardView = false;
-      _scanCenterView = false;
       _scanSettingsView = false;
       _savedSnapshot = null;
       _activityView = false;
@@ -480,7 +480,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() {
       _cleanupCategory = null;
       _dashboardView = false;
-      _scanCenterView = false;
       _scanSettingsView = false;
       _savedSnapshot = null;
       _activityView = true;
@@ -503,17 +502,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
             title: const Text('Dashboard'),
             onTap: () {
               _showDashboard();
-              if (closeDrawer) Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            selected: _scanCenterView,
-            selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            leading: const Icon(Icons.radar_outlined),
-            title: const Text('Scan Center'),
-            onTap: () {
-              _showScanCenter();
               if (closeDrawer) Navigator.pop(context);
             },
           ),
@@ -1023,29 +1011,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 onPause: _cleanup.pauseOrResume,
                 onStop: _cleanup.stop,
                 onReview: _chooseCleanup,
-                onScanCenter: _showScanCenter,
+                onToggleHistory: _toggleHistory,
+                showAllHistory: _showAllHistory,
                 onSettings: _showScanSettings,
-                onOpenSnapshot: _showSavedSnapshot,
-              )
-            : _scanCenterView
-            ? ScanCenterHome(
-                controller: _cleanup,
-                onBack: _showDashboard,
-                onStart: _startCurrentScan,
-                onSettings: _showScanSettings,
-                onPause: _cleanup.pauseOrResume,
-                onStop: _cleanup.stop,
-                onReview: _chooseCleanup,
                 onOpenSnapshot: _showSavedSnapshot,
               )
             : _scanSettingsView
             ? ScanSettingsHome(controller: _cleanup,
-                onBack: _settingsReturnToDashboard
-                    ? _showDashboard : _showScanCenter)
+                onBack: _showDashboard)
             : _savedSnapshot != null
             ? SavedSnapshotView(
                 snapshot: _savedSnapshot!,
-                onBack: _showScanCenter,
+                onBack: _showDashboard,
               )
             : _activityView
             ? const DeletionActivityView()
@@ -1125,13 +1102,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: _buildContent(visible, cols),
         )),
       ])),
-        if (isWide && !_dashboardView && !_scanCenterView &&
+        if (isWide && !_dashboardView &&
             !_scanSettingsView && _savedSnapshot == null) ...[
           const VerticalDivider(width: 1),
           SizedBox(width: 239, child: _buildCleanupSidebar(context)),
         ],
       ]),
-      bottomNavigationBar: _dashboardView || _scanCenterView ||
+      bottomNavigationBar: _dashboardView
           _scanSettingsView || _savedSnapshot != null ||
           _activityView || _cleanupCategory != null ||
           _selected.isEmpty ? null : SafeArea(
