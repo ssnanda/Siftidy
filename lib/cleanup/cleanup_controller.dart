@@ -328,15 +328,16 @@ class CleanupController extends ChangeNotifier {
   /// are available immediately from saved grouping IDs; thumbnails are fetched
   /// lazily rather than reprocessing the entire Photos library on launch.
   Future<void> restorePhotoReferences(Iterable<String> identifiers) async {
-    if (busy || _disposed) return;
-    var currentResult = result;
-    if (currentResult == null) return;
+    if (busy || _disposed) { return; }
+    final initialResult = result;
+    if (initialResult == null) { return; }
+    CleanupScanResult currentResult = initialResult;
     final generation = _scanGeneration;
     final missing = identifiers.toSet()
         .difference(currentResult.photos.keys.toSet()).toList();
     for (var offset = 0; offset < missing.length; offset += 24) {
       if (_disposed || busy || generation != _scanGeneration ||
-          result != currentResult) return;
+          result != currentResult) { return; }
       final batch = missing.skip(offset).take(24).toList();
       final retrieved = await Future.wait(batch.map((id) async {
         try {
@@ -346,11 +347,11 @@ class CleanupController extends ChangeNotifier {
         }
       }));
       if (_disposed || busy || generation != _scanGeneration ||
-          result != currentResult) return;
+          result != currentResult) { return; }
       final updated = Map<String, AssetEntity>.of(currentResult.photos);
       for (var i = 0; i < batch.length; i++) {
         final asset = retrieved[i];
-        if (asset != null) updated[batch[i]] = asset;
+        if (asset != null) { updated[batch[i]] = asset; }
       }
       currentResult = CleanupScanResult(
         photos: updated,
