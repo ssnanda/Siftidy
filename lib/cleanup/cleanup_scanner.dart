@@ -156,31 +156,49 @@ class CleanupScanner {
         reportPhase('Finding property tours');
         final candidateTours = propertySessionCandidates(scanned);
         final confirmedTours = <PropertyTourSuggestion>[];
-        for (final tour in candidateTours) {
-          if (cancelled()) { break; }
-          await waitIfPaused();
-          final ids = tour.ids;
-          final sampleIndices = <int>{0, ids.length ~/ 4,
-              ids.length ~/ 2, (ids.length * 3) ~/ 4, ids.length - 1};
+        // Inspect at most three representative views per session; two
+        // independent property hits are required, never time/GPS alone.
+        Future<bool> verifyTour(PropertyTourSuggestion tour) async {
           var evidence = 0;
+          final ids = tour.ids;
+          final sampleIndices = <int>{0, ids.length ~/ 2, ids.length - 1};
           for (final index in sampleIndices) {
             if (cancelled()) { break; }
+            await waitIfPaused();
             final asset = assets[ids[index]];
             if (asset == null) { continue; }
             try {
               final bytes = await asset.thumbnailDataWithSize(
-                const ThumbnailSize(360, 360),
-                format: ThumbnailFormat.jpeg, quality: 78,
+                const ThumbnailSize(256, 256),
+                format: ThumbnailFormat.jpeg, quality: 75,
               ).timeout(const Duration(seconds: 12));
               if (bytes == null) { continue; }
               final yes = await _vision.invokeMethod<bool>(
-                  'propertyEvidence', bytes).timeout(const Duration(seconds: 10));
-              if (yes == true) { evidence++; }
+                  'propertyEvidence', bytes)
+                  .timeout(const Duration(seconds: 8));
+              if (yes == true) {
+                evidence++;
+                if (evidence >= 2) return true;
+              }
             } catch (_) {
-              // Unavailable image or Vision is unknown, never positive.
+              // Missing/unavailable image evidence is not a positive.
             }
           }
-          if (evidence >= 2) { confirmedTours.add(tour); }
+          return false;
+        }
+
+        const parallelTours = 4;
+        for (var start = 0; start < candidateTours.length && !cancelled();
+            start += parallelTours) {
+          await waitIfPaused();
+          reportPhase('Checking property tours: '
+              '${start.clamp(0, candidateTours.length)} / '
+              '${candidateTours.length} candidate sessions');
+          final batch = candidateTours.skip(start).take(parallelTours).toList();
+          final matches = await Future.wait(batch.map(verifyTour));
+          for (var i = 0; i < batch.length; i++) {
+            if (matches[i]) confirmedTours.add(batch[i]);
+          }
         }
         if (!cancelled()) {
           groups = groups.withPropertyTours(confirmedTours);
@@ -223,7 +241,7 @@ class CleanupScanner {
       final thumbnails = await Future.wait(photos.map((asset) async {
         await waitIfPaused();
         await performance.pace(cancelled: cancelled);
-        if (cancelled()) return null;
+        if (cancelled()) { return null; }
         try {
           return await asset.thumbnailDataWithSize(
             screenshot ? const ThumbnailSize(384, 384)
@@ -252,7 +270,7 @@ class CleanupScanner {
           try {
             people = await _vision.invokeMethod<bool>('hasPeople', bytes)
                 .timeout(const Duration(seconds: 12));
-            if (people != null) peopleAvailable = true;
+            if (people != null) { peopleAvailable = true; }
           } on MissingPluginException {
             visionUsable = false;
           } catch (_) {
@@ -403,7 +421,7 @@ class CleanupScanner {
           // request should not leave the user staring at 0/256 for minutes.
           if (cursor % 96 == 0 || cursor >= batch.length) {
             await publish(checkpointOnly: true);
-            if (!cancelled()) onProgress(snapshot(groups));
+            if (!cancelled()) { onProgress(snapshot(groups)); }
           }
         }
         await publish();
