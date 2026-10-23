@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cleanup_scanner.dart';
+import '../background/scan_runtime.dart';
 
 /// Lives above the library tabs: switching views does not stop the scan.
 class CleanupController extends ChangeNotifier {
   final CleanupScanner _scanner = CleanupScanner();
+  final ScanRuntime performance = ScanRuntime();
   static const _autoKey = 'cleanup_auto_scan_v02';
 
   CleanupScanResult? result;
@@ -55,11 +57,16 @@ class CleanupController extends ChangeNotifier {
         group.where((id) => !_excluded.contains(id)).toList(),
   ];
 
-  void _notify() { if (!_disposed) notifyListeners(); }
+  void _notify() {
+    if (_disposed) return;
+    notifyListeners();
+    performance.sendStatus();
+  }
 
   Future<void> initialize() async {
     if (_settingsLoaded) return;
     final prefs = await SharedPreferences.getInstance();
+    await performance.initialize();
     if (_disposed) return;
     autoScan = prefs.getBool(_autoKey) ?? true;
     _settingsLoaded = true;
@@ -107,6 +114,7 @@ class CleanupController extends ChangeNotifier {
             await Future<void>.delayed(const Duration(milliseconds: 200));
           }
         },
+        performance: performance,
         protectedIds: Set<String>.of(_protected),
         year: year,
         analyzePeople: analyzingPeople,
@@ -190,6 +198,7 @@ class CleanupController extends ChangeNotifier {
     _cancel = true;
     _scanGeneration++;
     _disposed = true;
+    performance.dispose();
     super.dispose();
   }
 }

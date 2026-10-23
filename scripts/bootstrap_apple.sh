@@ -66,5 +66,6 @@ done
 
 python3 scripts/install_vision_bridge.py
 python3 scripts/configure_macos_window.py
+python3 scripts/install_menubar.py
 
 echo 'Ready: flutter run -d macos'

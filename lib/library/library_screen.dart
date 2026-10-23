@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -14,6 +15,7 @@ import 'filtering.dart';
 import 'library_repository.dart';
 import '../cleanup/cleanup_screen.dart';
 import '../cleanup/cleanup_controller.dart';
+import '../background/scan_runtime.dart';
 import '../cleanup/media_sizes.dart';
 import '../cleanup/deletion_stats.dart';
 import '../updates/update_button.dart';
@@ -85,6 +87,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
     _cleanup.addListener(_onCleanupChanged);
     _sizes.addListener(_onCleanupChanged);
     DeletionStats.instance.load();
+    _cleanup.performance.attach(
+      readProgress: () => ScanProgress(
+        visited: _cleanup.visited,
+        total: _cleanup.total,
+        analyzed: _cleanup.result?.photos.length ?? 0,
+        running: _cleanup.running,
+        paused: _cleanup.paused,
+        complete: _cleanup.completed,
+        eta: _cleanup.eta,
+      ),
+      onAction: (action) {
+        if (!mounted) return;
+        switch (action) {
+          case 'scan':
+            if (_permission?.hasAccess == true) {
+              _cleanup.start(
+                scopeYear: _cleanup.year,
+                people: _cleanup.analyzingPeople,
+              );
+            } else {
+              _reload(requestPermission: true);
+            }
+            _chooseCleanup(CleanupCategory.exact);
+            break;
+          case 'pause':
+            _cleanup.pauseOrResume();
+            break;
+          case 'stop':
+            _cleanup.stop();
+            break;
+          case 'discard':
+            _cleanup.discardScan();
+            break;
+          case 'windowHidden':
+            // Scan keeps running; release the gallery's decoded-image cache.
+            PaintingBinding.instance.imageCache.clear();
+            break;
+          default:
+            break;
+        }
+      },
+    );
     _reload(requestPermission: true);
   }
 

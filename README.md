@@ -89,3 +89,44 @@ Apple Photos' protected **Recently Deleted** contents cannot be read or emptied
 through Siftidy's ordinary PhotoKit access. The left sidebar shortcut opens
 Apple Photos so users can inspect or empty it directly. Siftidy therefore
 reports neither its live item count nor confirmed disk space freed.
+
+## Menu-bar background scanning (v0.2)
+
+Closing the main window **hides it without terminating Siftidy**. The scan
+continues in the menu bar while the Mac is awake. Hover over the small ▧
+percentage status item to see total/scanned/pending counts, analyzed photos,
+approximate ETA, current process CPU percentage, current resident RAM, and
+effective scanning speed. Click for **Open Siftidy**, **Start**, **Pause /
+Resume**, **Stop**, **Discard scan results**, scan-speed settings, and **Quit
+Completely**. Quit Completely actually terminates the application.
+
+Scan profiles may be changed while scanning:
+
+| Mode | Approximate process CPU target | Parallel thumbnail workers |
+| --- | --- | --- |
+| Minimal | 1–3% | 1 |
+| Eco (default) | 5–10% | 1 |
+| Balanced | 20–40% | 2 |
+| Turbo | Can use multiple CPU cores | 4 |
+
+Process CPU percentages use the macOS convention where 100% is one busy
+logical CPU. These are **best-effort average targets, not hard CPU quotas**:
+PhotoKit decoding, iCloud transfers and Flutter can create short spikes.
+Throttling is adaptive and conservatively delays work in quiet modes. Turbo
+parallelizes *thumbnail decoding and Vision requests* in batches of up to four;
+photo-library writes/deletion remain user-driven and serial. A scan is never
+allowed to delete photos automatically.
+
+Choose **Turbo for 30, 60 or 120 minutes** from the menu. Once the Mac has
+been idle for 20 seconds, returning to keyboard/mouse activity switches back
+to the configured mode. Turbo also ends at its chosen timeout. Optional
+**Auto Turbo after 10 minutes idle** requires AC power and automatically
+returns to the selected normal speed on user activity. Serious thermal
+pressure reduces the effective speed to Eco. Automatic Turbo is **off by
+default**. A scan does not keep a sleeping Mac awake. Results are maintained
+only while Siftidy remains running, not across **Quit Completely**.
+
+Menu-bar operation removes the window from the screen and clears the gallery's
+decoded-image cache, but the Flutter engine and the in-progress scan remain
+in memory. It is not a separate lightweight daemon. CPU and memory readings
+are for the whole Siftidy process, not an isolated worker.

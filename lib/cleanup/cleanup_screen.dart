@@ -5,6 +5,7 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import '../library/library_repository.dart';
 import '../library/photo_preview_dialog.dart';
 import 'cleanup_controller.dart';
+import '../background/scan_runtime.dart';
 import 'duplicate_selection.dart';
 import 'media_sizes.dart';
 
@@ -392,6 +393,47 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                 ),
                 icon: const Icon(Icons.radar_outlined),
                 label: Text(controller.running ? 'Scanning…' : 'Scan / Rescan'),
+              ),
+              DropdownButton<ScanMode>(
+                value: controller.performance.activeMode,
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (final mode in ScanMode.values)
+                    DropdownMenuItem(
+                      value: mode,
+                      child: Text(mode == ScanMode.turbo
+                          ? 'Turbo (temporary)' : mode.title),
+                    ),
+                ],
+                onChanged: (mode) {
+                  if (mode == null) return;
+                  controller.performance.setBaseMode(mode);
+                },
+              ),
+              PopupMenuButton<int>(
+                tooltip: 'Run Turbo for a chosen duration',
+                onSelected: (minutes) => controller.performance.activateTurbo(
+                  Duration(minutes: minutes),
+                ),
+                itemBuilder: (_) => [
+                  for (final minutes in [30, 60, 120])
+                    PopupMenuItem(value: minutes,
+                      child: Text('Turbo · $minutes minutes')),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.bolt_outlined, size: 18),
+                    SizedBox(width: 3),
+                    Text('Turbo'),
+                    Icon(Icons.arrow_drop_down, size: 18),
+                  ]),
+                ),
+              ),
+              FilterChip(
+                label: const Text('Turbo when idle (AC)'),
+                selected: controller.performance.autoTurboOnIdle,
+                onSelected: controller.performance.setAutoTurboOnIdle,
               ),
               if (controller.running) ...[
                 OutlinedButton.icon(
