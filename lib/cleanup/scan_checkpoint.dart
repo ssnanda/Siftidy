@@ -147,13 +147,15 @@ class ScanCheckpointStore {
   }
 
   Future<ScanCheckpoint> begin({required int? year,
-      required bool people, required int total}) async {
+      required bool people, required int total,
+      bool forceFresh = false}) async {
     final old = current ?? await load();
     if (recoveryIssue != null) {
       throw StateError('Cannot overwrite an unreadable scan checkpoint. '
           '$recoveryIssue Use History & storage to inspect the folder.');
     }
-    if (old != null && old.year == year && old.people == people) {
+    if (!forceFresh && old != null &&
+        old.year == year && old.people == people) {
       // A new/deleted asset changes the library size, not the validity
       // of previously analyzed stable PhotoKit IDs.
       if (old.total != total) {
@@ -163,7 +165,10 @@ class ScanCheckpointStore {
       }
       return old;
     }
-    if (old != null) { await finish('replaced'); }
+    // A completed session already has its own history and saved results.
+    // Starting again must not overwrite that report with "replaced".
+    if (old != null && !old.complete) { await finish('replaced'); }
+    await _pendingAppend;
     final fresh = ScanCheckpoint(started: DateTime.now(),
         year: year, people: people, total: total);
     await _journal.writeAsString('', flush: true);
