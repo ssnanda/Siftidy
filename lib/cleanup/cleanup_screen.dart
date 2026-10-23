@@ -6,6 +6,7 @@ import '../library/library_repository.dart';
 import '../library/photo_preview_dialog.dart';
 import 'cleanup_controller.dart';
 import '../background/scan_runtime.dart';
+import 'photo_analysis.dart';
 import 'duplicate_selection.dart';
 import 'media_sizes.dart';
 import 'scan_history_view.dart';
