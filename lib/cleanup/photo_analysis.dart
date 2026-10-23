@@ -197,8 +197,9 @@ class PropertyTourSuggestion {
   final double? latitude, longitude;
 }
 
-/// Quickly proposes consecutive camera-photo sessions. These are not property
-/// tours until independent on-device visual evidence validates them.
+/// Quickly proposes *complete* time/location sessions for visual inspection.
+/// Five photos is the minimum qualification, never a maximum photo count.
+/// No inferred category is accepted until on-device image inspection passes.
 List<PropertyTourSuggestion> propertySessionCandidates(
     List<ScannedPhoto> photos, {int minPhotos = 5}) {
   final sorted = photos.where((p) => p.createdAtMs > 0)
@@ -225,13 +226,11 @@ List<PropertyTourSuggestion> propertySessionCandidates(
     }
     if (current.isNotEmpty) {
       final gap = item.createdAtMs - current.last.createdAtMs;
-      final elapsed = item.createdAtMs - current.first.createdAtMs;
       final displaced = item.latitude != null && item.longitude != null &&
           anchorLat != null && anchorLon != null &&
           _geoMeters(item.latitude!, item.longitude!, anchorLat!, anchorLon!) > 200;
-      if (gap > const Duration(minutes: 20).inMilliseconds ||
-          elapsed > const Duration(minutes: 90).inMilliseconds ||
-          gap < 0 || displaced || current.length >= 100) {
+      if (gap > const Duration(minutes: 30).inMilliseconds ||
+          gap < 0 || displaced) {
         finish();
       }
     }
@@ -241,6 +240,73 @@ List<PropertyTourSuggestion> propertySessionCandidates(
   }
   finish();
   return sessions;
+}
+
+/// Per-photo on-device residential scene result. Unknown/unavailable
+/// images are excluded, and photos with detected people always break a tour.
+enum PropertySceneKind { property, neutralInterior, people, notProperty, unknown }
+
+/// Returns uninterrupted, visually validated *full* tour runs. Non-property
+/// event frames and every people-containing image split candidate sessions.
+/// Neutral indoor views (e.g. a doorway) are retained only when supported by
+/// enough clearly residential rooms in the same uninterrupted sequence.
+List<PropertyTourSuggestion> confirmedPropertyTourRuns(
+    PropertyTourSuggestion candidate, Map<String, PropertySceneKind> evidence,
+    {int minimumPhotos = 5}) {
+  final result = <PropertyTourSuggestion>[];
+  final run = <String>[];
+  var residential = 0;
+  void finish() {
+    if (run.length >= minimumPhotos &&
+        residential >= 3 &&
+        residential * 5 >= run.length * 3) {
+      result.add(PropertyTourSuggestion(ids: List<String>.of(run),
+          startedAtMs: candidate.startedAtMs,
+          latitude: candidate.latitude, longitude: candidate.longitude));
+    }
+    run.clear();
+    residential = 0;
+  }
+  for (final id in candidate.ids) {
+    final kind = evidence[id] ?? PropertySceneKind.unknown;
+    if (kind == PropertySceneKind.people ||
+        kind == PropertySceneKind.notProperty ||
+        kind == PropertySceneKind.unknown) {
+      finish();
+      continue;
+    }
+    run.add(id);
+    if (kind == PropertySceneKind.property) residential++;
+  }
+  finish();
+  return result;
+}
+
+/// Explains why an accidental screenshot is suggested. Only known reasons
+/// generate concrete subcategories, so old scan snapshots still work.
+enum ScreenshotSuggestionKind { lockScreens, blankScreens, repeatedScreens, other }
+
+ScreenshotSuggestionKind screenshotKindForReason(String? reason) {
+  final text = (reason ?? '').toLowerCase();
+  if (text.contains('lock-screen') || text.contains('lock screen')) {
+    return ScreenshotSuggestionKind.lockScreens;
+  }
+  if (text.contains('blank') || text.contains('empty')) {
+    return ScreenshotSuggestionKind.blankScreens;
+  }
+  if (text.contains('repeat') || text.contains('identical')) {
+    return ScreenshotSuggestionKind.repeatedScreens;
+  }
+  return ScreenshotSuggestionKind.other;
+}
+
+extension ScreenshotSuggestionLabels on ScreenshotSuggestionKind {
+  String get label => switch (this) {
+    ScreenshotSuggestionKind.lockScreens => 'Lock screens',
+    ScreenshotSuggestionKind.blankScreens => 'Blank captures',
+    ScreenshotSuggestionKind.repeatedScreens => 'Repeated captures',
+    ScreenshotSuggestionKind.other => 'Other suggestions',
+  };
 }
 
 double _geoMeters(double lat1, double lon1, double lat2, double lon2) {
