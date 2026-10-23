@@ -55,7 +55,7 @@ class CleanupScanner {
   // Use fewer PhotoKit round trips while rebuilding many cached IDs.
   static const _pageSize = 256;
   // Classifying all cached photos every page can stall a resumed scan.
-  static const _classifyAfterNewPhotos = 256;
+  static const _classifyAfterNewPhotos = 4096;
 
   Future<CleanupScanResult> scan({
     required bool Function() cancelled,
@@ -149,7 +149,7 @@ class CleanupScanner {
         groups = await compute(classifyPhotos, List<ScannedPhoto>.of(scanned))
             .timeout(Duration(seconds: finalPass ? 120 : 30),
                 onTimeout: () => throw TimeoutException(
-                    'Cleanup grouping exceeded 30 seconds.'));
+                    'Cleanup grouping exceeded its time limit.'));
         freshAnalyzedSinceClassification = 0;
       }
       if (finalPass && !cancelled()) {
@@ -212,54 +212,74 @@ class CleanupScanner {
       return hash;
     }
 
-    Future<_ThumbnailAnalysis> analyze(AssetEntity asset,
-        {required bool screenshot}) async {
-      await waitIfPaused();
-      await performance.pace(cancelled: cancelled);
-      if (cancelled()) { return const _ThumbnailAnalysis(null, null, null); }
-      reportPhase('Analyzing new photos');
-      final bytes = await asset.thumbnailDataWithSize(
-        const ThumbnailSize(192, 192),
-        format: ThumbnailFormat.jpeg,
-        quality: 80,
-      ).timeout(const Duration(seconds: 20));
-      if (bytes == null || cancelled()) {
-        return const _ThumbnailAnalysis(null, null, null);
-      }
-      final fingerprint = await compute(fingerprintThumbnail, bytes)
-          .timeout(const Duration(seconds: 20));
-      if (fingerprint == null) { return const _ThumbnailAnalysis(null, null, null); }
-      bool? people;
-      if (analyzePeople && visionUsable) {
+    /// Fetch a small bounded group of PhotoKit thumbnails, then compute all
+    /// fingerprints in a single isolate. Previously one compute() isolate and
+    /// an additional 640px PhotoKit read/OCR ran for *every* screenshot.
+    Future<List<_ThumbnailAnalysis>> analyzeBatch(
+        List<AssetEntity> photos, {required bool screenshot}) async {
+      if (photos.isEmpty) return const [];
+      reportPhase(screenshot ? 'Analyzing screenshot thumbnails'
+          : 'Analyzing photo thumbnails');
+      final thumbnails = await Future.wait(photos.map((asset) async {
+        await waitIfPaused();
+        await performance.pace(cancelled: cancelled);
+        if (cancelled()) return null;
         try {
-          people = await _vision.invokeMethod<bool>('hasPeople', bytes)
-              .timeout(const Duration(seconds: 15));
-          if (people != null) { peopleAvailable = true; }
-        } on MissingPluginException {
-          visionUsable = false;
-        } on PlatformException {
-          // Unknown result is not proof that no person is in the photo.
+          return await asset.thumbnailDataWithSize(
+            screenshot ? const ThumbnailSize(384, 384)
+                : const ThumbnailSize(192, 192),
+            format: ThumbnailFormat.jpeg, quality: 78,
+          ).timeout(const Duration(seconds: 20));
+        } catch (_) {
+          return null;
         }
+      }));
+      if (cancelled()) {
+        return [for (final _ in photos)
+          const _ThumbnailAnalysis(null, null, null)];
       }
-      String? accidentalReason;
-      if (screenshot) {
-        accidentalReason = blankScreenshotReason(fingerprint);
-        if (accidentalReason == null) {
+      final fingerprints = await compute(fingerprintThumbnailBatch, thumbnails)
+          .timeout(const Duration(seconds: 30));
+      return Future.wait(List.generate(photos.length, (index) async {
+        final finger = fingerprints[index];
+        if (finger == null || cancelled()) {
+          return const _ThumbnailAnalysis(null, null, null);
+        }
+        final asset = photos[index];
+        final bytes = thumbnails[index];
+        bool? people;
+        if (analyzePeople && visionUsable && bytes != null) {
           try {
-            final detail = await asset.thumbnailDataWithSize(
-              const ThumbnailSize(640, 640),
-              format: ThumbnailFormat.jpeg, quality: 85,
-            ).timeout(const Duration(seconds: 12));
-            if (detail != null) {
-              accidentalReason = await _vision.invokeMethod<String>(
-                'screenshotReason', detail).timeout(const Duration(seconds: 12));
-            }
+            people = await _vision.invokeMethod<bool>('hasPeople', bytes)
+                .timeout(const Duration(seconds: 12));
+            if (people != null) peopleAvailable = true;
+          } on MissingPluginException {
+            visionUsable = false;
           } catch (_) {
-            // OCR failure is unknown, not proof of an accidental screenshot.
+            // A failed Vision request is unknown, never "no people".
           }
         }
-      }
-      return _ThumbnailAnalysis(fingerprint, people, accidentalReason);
+        String? accidentalReason;
+        if (screenshot) {
+          accidentalReason = blankScreenshotReason(finger);
+          // Lock screens are portrait phone screenshots. Skip unnecessary
+          // OCR of desktop screenshots, documents and landscape captures.
+          final mobilePortrait = asset.width > 0 &&
+              asset.height >= asset.width * 1.6 &&
+              asset.height <= asset.width * 2.8;
+          if (accidentalReason == null && mobilePortrait && bytes != null) {
+            reportPhase('Checking potential lock-screen screenshots');
+            try {
+              accidentalReason = await _vision.invokeMethod<String>(
+                  'screenshotReason', bytes)
+                  .timeout(const Duration(seconds: 8));
+            } catch (_) {
+              // Unknown is not an accidental screenshot.
+            }
+          }
+        }
+        return _ThumbnailAnalysis(finger, people, accidentalReason);
+      }));
     }
 
     Future<void> index(AssetPathEntity path, {bool isScreenshot = false}) async {
@@ -318,13 +338,8 @@ class CleanupScanner {
             }
             toAnalyze.add(asset);
           }
-          final results = await Future.wait(toAnalyze.map((asset) async {
-            try {
-              return await analyze(asset, screenshot: isScreenshot);
-            } catch (_) {
-              return const _ThumbnailAnalysis(null, null, null);
-            }
-          }));
+          final results = await analyzeBatch(toAnalyze,
+              screenshot: isScreenshot);
           if (cancelled()) { break; }
           for (var i = 0; i < results.length && !cancelled(); i++) {
             final asset = toAnalyze[i];
@@ -383,6 +398,12 @@ class CleanupScanner {
             assets[asset.id] = asset;
             pending.add(ScanRow(asset.id, asset.createDateTime.year,
               asset.width, asset.height, photo: analyzedPhoto));
+          }
+          // Journal and report independently of grouping. A slow Photos
+          // request should not leave the user staring at 0/256 for minutes.
+          if (cursor % 96 == 0 || cursor >= batch.length) {
+            await publish(checkpointOnly: true);
+            if (!cancelled()) onProgress(snapshot(groups));
           }
         }
         await publish();
