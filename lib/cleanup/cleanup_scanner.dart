@@ -19,6 +19,7 @@ class CleanupScanResult {
     required this.skipped,
     required this.peopleDetectionAvailable,
     required this.years,
+    this.smartAnalyzed = false,
     this.restoring = false,
     this.restoredIndexed = 0,
     this.restoredTotal = 0,
@@ -30,6 +31,7 @@ class CleanupScanResult {
   final int visited;
   final int skipped;
   final bool peopleDetectionAvailable;
+  final bool smartAnalyzed;
   final Set<int> years;
   /// Rebuilding in-memory asset references from the saved analysis journal.
   /// Previously analyzed assets must never be re-decoded in this phase.
@@ -39,9 +41,10 @@ class CleanupScanResult {
 }
 
 class _ThumbnailAnalysis {
-  const _ThumbnailAnalysis(this.fingerprint, this.people);
+  const _ThumbnailAnalysis(this.fingerprint, this.people, this.accidentalReason);
   final PhotoFingerprint? fingerprint;
   final bool? people;
+  final String? accidentalReason;
 }
 
 /// PhotoKit data stays on the main isolate. Thumbnail decoding and Vision
@@ -88,6 +91,7 @@ class CleanupScanner {
     var visited = restored.length;
     // Availability means Vision returned a real result, not merely that
     // the toggle was enabled. A failed/absent bridge must not yield a zero.
+    var smartAnalyzed = false;
     var peopleAvailable = false;
     var visionUsable = analyzePeople;
     String lastPhase = '';
@@ -116,6 +120,7 @@ class CleanupScanner {
       visited: visited,
       skipped: skipped,
       peopleDetectionAvailable: peopleAvailable,
+      smartAnalyzed: smartAnalyzed,
       years: Set<int>.of(years),
     );
 
@@ -147,6 +152,41 @@ class CleanupScanner {
                     'Cleanup grouping exceeded 30 seconds.'));
         freshAnalyzedSinceClassification = 0;
       }
+      if (finalPass && !cancelled()) {
+        reportPhase('Finding property tours');
+        final candidateTours = propertySessionCandidates(scanned);
+        final confirmedTours = <PropertyTourSuggestion>[];
+        for (final tour in candidateTours) {
+          if (cancelled()) break;
+          await waitIfPaused();
+          final ids = tour.ids;
+          final sampleIndices = <int>{0, ids.length ~/ 4,
+              ids.length ~/ 2, (ids.length * 3) ~/ 4, ids.length - 1};
+          var evidence = 0;
+          for (final index in sampleIndices) {
+            if (cancelled()) break;
+            final asset = assets[ids[index]];
+            if (asset == null) continue;
+            try {
+              final bytes = await asset.thumbnailDataWithSize(
+                const ThumbnailSize(360, 360),
+                format: ThumbnailFormat.jpeg, quality: 78,
+              ).timeout(const Duration(seconds: 12));
+              if (bytes == null) continue;
+              final yes = await _vision.invokeMethod<bool>(
+                  'propertyEvidence', bytes).timeout(const Duration(seconds: 10));
+              if (yes == true) evidence++;
+            } catch (_) {
+              // Unavailable image or Vision is unknown, never positive.
+            }
+          }
+          if (evidence >= 2) confirmedTours.add(tour);
+        }
+        if (!cancelled()) {
+          groups = groups.withPropertyTours(confirmedTours);
+          smartAnalyzed = true;
+        }
+      }
       if (!cancelled()) onProgress(snapshot(groups));
     }
 
@@ -172,10 +212,11 @@ class CleanupScanner {
       return hash;
     }
 
-    Future<_ThumbnailAnalysis> analyze(AssetEntity asset) async {
+    Future<_ThumbnailAnalysis> analyze(AssetEntity asset,
+        {required bool screenshot}) async {
       await waitIfPaused();
       await performance.pace(cancelled: cancelled);
-      if (cancelled()) return const _ThumbnailAnalysis(null, null);
+      if (cancelled()) return const _ThumbnailAnalysis(null, null, null);
       reportPhase('Analyzing new photos');
       final bytes = await asset.thumbnailDataWithSize(
         const ThumbnailSize(192, 192),
@@ -183,11 +224,11 @@ class CleanupScanner {
         quality: 80,
       ).timeout(const Duration(seconds: 20));
       if (bytes == null || cancelled()) {
-        return const _ThumbnailAnalysis(null, null);
+        return const _ThumbnailAnalysis(null, null, null);
       }
       final fingerprint = await compute(fingerprintThumbnail, bytes)
           .timeout(const Duration(seconds: 20));
-      if (fingerprint == null) return const _ThumbnailAnalysis(null, null);
+      if (fingerprint == null) return const _ThumbnailAnalysis(null, null, null);
       bool? people;
       if (analyzePeople && visionUsable) {
         try {
@@ -200,7 +241,25 @@ class CleanupScanner {
           // Unknown result is not proof that no person is in the photo.
         }
       }
-      return _ThumbnailAnalysis(fingerprint, people);
+      String? accidentalReason;
+      if (screenshot) {
+        accidentalReason = blankScreenshotReason(fingerprint);
+        if (accidentalReason == null) {
+          try {
+            final detail = await asset.thumbnailDataWithSize(
+              const ThumbnailSize(640, 640),
+              format: ThumbnailFormat.jpeg, quality: 85,
+            ).timeout(const Duration(seconds: 12));
+            if (detail != null) {
+              accidentalReason = await _vision.invokeMethod<String>(
+                'screenshotReason', detail).timeout(const Duration(seconds: 12));
+            }
+          } catch (_) {
+            // OCR failure is unknown, not proof of an accidental screenshot.
+          }
+        }
+      }
+      return _ThumbnailAnalysis(fingerprint, people, accidentalReason);
     }
 
     Future<void> index(AssetPathEntity path, {bool isScreenshot = false}) async {
@@ -261,9 +320,9 @@ class CleanupScanner {
           }
           final results = await Future.wait(toAnalyze.map((asset) async {
             try {
-              return await analyze(asset);
+              return await analyze(asset, screenshot: isScreenshot);
             } catch (_) {
-              return const _ThumbnailAnalysis(null, null);
+              return const _ThumbnailAnalysis(null, null, null);
             }
           }));
           if (cancelled()) break;
@@ -294,6 +353,9 @@ class CleanupScanner {
                   sha256: originalDigest,
                   hasPeople: previous.hasPeople,
                   isScreenshot: previous.isScreenshot,
+                  createdAtMs: previous.createdAtMs,
+                  latitude: previous.latitude, longitude: previous.longitude,
+                  accidentalReason: previous.accidentalReason,
                 );
                 final previousAsset = assets[peer.id];
                 if (previousAsset != null) {
@@ -311,6 +373,10 @@ class CleanupScanner {
               sha256: digest,
               hasPeople: results[i].people,
               isScreenshot: isScreenshot,
+              createdAtMs: asset.createDateTime.millisecondsSinceEpoch,
+              latitude: asset.latLng?.latitude,
+              longitude: asset.latLng?.longitude,
+              accidentalReason: results[i].accidentalReason,
             );
             scanned.add(analyzedPhoto);
             freshAnalyzedSinceClassification++;
