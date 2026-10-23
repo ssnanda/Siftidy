@@ -58,14 +58,16 @@ class _PropertyToursViewState extends State<PropertyToursView> {
     final text = _editors[key]?.text.trim() ?? '';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('property_label_$key', text);
-    if (mounted) setState(() {
-      if (text.isEmpty) {
-        _labels.remove(key);
-      } else {
-        _labels[key] = text;
-      }
-      _message = 'Tour label saved locally.';
-    });
+    if (mounted) {
+      setState(() {
+        if (text.isEmpty) {
+          _labels.remove(key);
+        } else {
+          _labels[key] = text;
+        }
+        _message = 'Tour label saved locally.';
+      });
+    }
   }
 
   Future<void> _dismiss(PropertyTourSuggestion tour) async {
