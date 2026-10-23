@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../cleanup/cleanup_controller.dart';
 import '../background/scan_runtime.dart';
@@ -34,20 +37,26 @@ class DashboardHome extends StatelessWidget {
     required this.onPause,
     required this.onStop,
     required this.onReview,
-    required this.onScanCenter,
+    required this.onToggleHistory,
+    this.showAllHistory = false,
     required this.onSettings,
     required this.onOpenSnapshot,
   });
 
   final CleanupController controller;
-  final VoidCallback onScan, onPause, onStop, onScanCenter, onSettings;
+  final VoidCallback onScan, onPause, onStop, onToggleHistory, onSettings;
+  final bool showAllHistory;
   final ValueChanged<CleanupCategory> onReview;
   final ValueChanged<ScanResultSnapshot> onOpenSnapshot;
 
   @override
   Widget build(BuildContext context) {
+    final finalizing = controller.running && !controller.paused &&
+        controller.total > 0 && controller.visited >= controller.total;
     final status = controller.paused ? 'Paused'
+        : finalizing ? 'Finalizing results'
         : controller.running ? 'Scanning'
+        : controller.starting ? 'Preparing scan'
         : controller.completed ? 'Completed'
         : controller.visited > 0 ? 'Ready to resume' : 'Ready to scan';
     final completePercent = (controller.fraction * 100).round();
@@ -62,8 +71,6 @@ class DashboardHome extends StatelessWidget {
             const Text('Your library, scan results, and next steps.'),
           ],
         )),
-        IconButton(tooltip: 'Scan settings', onPressed: onSettings,
-          icon: const Icon(Icons.settings_outlined)),
       ]),
       const SizedBox(height: 20),
       Card(clipBehavior: Clip.antiAlias, child: Padding(
@@ -94,10 +101,13 @@ class DashboardHome extends StatelessWidget {
                 Text('Elapsed: ${scanDuration(
                   controller.checkpointStore!.current!.elapsedMs)}'),
             ]),
-            if (controller.running) ...[
+            if (controller.running || controller.starting) ...[
               const SizedBox(height: 8),
               Text(controller.paused ? 'Paused — saved work is retained'
-                  : controller.scanPhase),
+                  : finalizing
+                      ? 'All photos indexed. Organizing the results before '
+                          'the scan is marked complete.'
+                      : controller.scanPhase),
             ],
             if (controller.error != null) ...[
               const SizedBox(height: 8),
@@ -105,22 +115,58 @@ class DashboardHome extends StatelessWidget {
             ],
             const SizedBox(height: 18),
             Wrap(spacing: 10, runSpacing: 10, children: [
-              FilledButton.icon(
-                onPressed: controller.running
-                    ? (controller.paused ? onPause : null) : onScan,
-                icon: Icon(controller.paused ? Icons.play_arrow : Icons.play_circle),
-                label: Text(controller.paused ? 'Resume scan'
-                    : controller.visited > 0 && !controller.completed
-                    ? 'Resume scan' : 'Scan now')),
-              if (controller.running && !controller.paused)
-                OutlinedButton.icon(onPressed: onPause,
-                  icon: const Icon(Icons.pause),
-                  label: const Text('Pause')),
+              if (!controller.running)
+                FilledButton.icon(
+                  onPressed: controller.starting ? null : onScan,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: Text(controller.starting ? 'Preparing…'
+                      : controller.completed ? 'Scan again'
+                      : controller.visited > 0 ? 'Resume scan'
+                      : 'Scan now')),
+              if (controller.running)
+                OutlinedButton.icon(
+                  onPressed: onPause,
+                  icon: Icon(controller.paused
+                      ? Icons.play_arrow : Icons.pause),
+                  label: Text(controller.paused ? 'Resume' : 'Pause')),
               if (controller.running)
                 TextButton(onPressed: onStop, child: const Text('Stop')),
-              TextButton.icon(onPressed: onScanCenter,
-                icon: const Icon(Icons.tune_outlined),
-                label: const Text('Scan Center')),
+              const SizedBox(width: 8),
+              const Text('Speed:'),
+              DropdownButton<ScanMode>(
+                value: controller.performance.activeMode,
+                isDense: true,
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (final mode in ScanMode.values)
+                    DropdownMenuItem(value: mode, child: Text(mode.title)),
+                ],
+                onChanged: (mode) {
+                  if (mode != null) controller.performance.setBaseMode(mode);
+                },
+              ),
+              PopupMenuButton<int>(
+                tooltip: 'Choose timed Turbo duration',
+                onSelected: (minutes) => controller.performance.activateTurbo(
+                  Duration(minutes: minutes)),
+                itemBuilder: (_) => [
+                  for (final minutes in [30, 60, 120])
+                    PopupMenuItem(value: minutes,
+                      child: Text('Turbo for $minutes minutes')),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.bolt_outlined, size: 18),
+                    Text('Timed Turbo'),
+                    Icon(Icons.arrow_drop_down, size: 18),
+                  ]),
+                ),
+              ),
+              FilterChip(
+                label: const Text('Turbo on idle (AC)'),
+                selected: controller.performance.autoTurboOnIdle,
+                onSelected: controller.performance.setAutoTurboOnIdle),
             ]),
           ],
         ),
@@ -130,9 +176,9 @@ class DashboardHome extends StatelessWidget {
         Expanded(child: Text('Review your results', style:
           Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700))),
-        TextButton.icon(onPressed: onScanCenter,
+        TextButton.icon(onPressed: onToggleHistory,
           icon: const Icon(Icons.history, size: 18),
-          label: const Text('Manage scans')),
+          label: Text(showAllHistory ? 'Show recent' : 'History & storage')),
       ]),
       const SizedBox(height: 9),
       LayoutBuilder(builder: (context, constraints) {
@@ -163,7 +209,12 @@ class DashboardHome extends StatelessWidget {
       ),
       const SizedBox(height: 28),
       RecentScanRuns(controller: controller,
-        onOpen: onOpenSnapshot, onViewAll: onScanCenter),
+        limit: showAllHistory ? 30 : 5,
+        onOpen: onOpenSnapshot, onViewAll: onToggleHistory),
+      if (showAllHistory) ...[
+        const SizedBox(height: 18),
+        DashboardScanStorage(controller: controller),
+      ],
     ]);
   }
 
@@ -294,7 +345,7 @@ class _RecentScanRunsState extends State<RecentScanRuns> {
           onPressed: () => setState(_refresh),
           icon: const Icon(Icons.refresh)),
         TextButton(onPressed: widget.onViewAll,
-          child: const Text('Scan Center')),
+          child: Text(widget.limit > 5 ? 'Show less' : 'View all')),
       ]),
       const SizedBox(height: 8),
       FutureBuilder<_HistoryData>(future: _data,
@@ -373,4 +424,57 @@ class _HistoryData {
   const _HistoryData(this.records, this.snapshots);
   final List<Map<String, dynamic>> records;
   final List<ScanResultSnapshot> snapshots;
+}
+
+class DashboardScanStorage extends StatelessWidget {
+  const DashboardScanStorage({super.key, required this.controller});
+  final CleanupController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = controller.checkpointStore;
+    if (store == null) return const SizedBox.shrink();
+    return FutureBuilder(
+      future: store.usage(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Card(child: Padding(
+            padding: EdgeInsets.all(16), child: Text('Measuring storage…')));
+        }
+        final usage = snapshot.data!;
+        return Card(child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Scan history & storage',
+                style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text('Local scan files only. Photos are never included.'),
+              const SizedBox(height: 8),
+              SelectableText(usage.folder),
+              const SizedBox(height: 8),
+              Text('Active checkpoint: ${scanFileSize(usage.activeBytes)}'
+                  ' · Scan history: ${scanFileSize(usage.historyBytes)}'
+                  ' · Total with snapshots: ${scanFileSize(usage.totalBytes)}'),
+              const SizedBox(height: 8),
+              Wrap(spacing: 12, children: [
+                TextButton.icon(
+                  onPressed: () => Clipboard.setData(
+                    ClipboardData(text: usage.folder)),
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Copy path'),
+                ),
+                if (Platform.isMacOS) TextButton.icon(
+                  onPressed: () => Process.run('open', [usage.folder]),
+                  icon: const Icon(Icons.folder_open_outlined),
+                  label: const Text('Open in Finder'),
+                ),
+              ]),
+            ],
+          ),
+        ));
+      },
+    );
+  }
 }
