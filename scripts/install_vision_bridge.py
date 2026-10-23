@@ -52,7 +52,7 @@ bridge = r'''
             }
             let clock = words.contains { word, y in
               return y > 0.42 &&
-                     word.range(of: #"^\\d{1,2}:\\d{2}$"#,
+                     word.range(of: #"^\d{1,2}:\d{2}$"#,
                                 options: .regularExpression) != nil
             }
             let weekday = words.contains { word, _ in
@@ -71,11 +71,11 @@ bridge = r'''
             let terms = ["living room", "bedroom", "bathroom", "kitchen",
                          "dining room", "house", "residence", "apartment",
                          "home interior", "interior design", "stairway",
-                         "hallway", "room", "real estate", "building exterior"]
+                         "hallway", "real estate", "building exterior"]
             let matches = (classify.results ?? []).prefix(15).contains { item in
               let label = item.identifier.lowercased()
               return item.confidence >= 0.10 &&
-                     terms.contains(where: { label.contains($0) })
+                     terms.contains(where: { label == $0 || label.contains(" " + $0) })
             }
             DispatchQueue.main.async { result(matches) }
           }
