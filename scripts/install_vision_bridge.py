@@ -40,7 +40,7 @@ bridge = r'''
             DispatchQueue.main.async { result(detected) }
           } else if call.method == "screenshotReason" {
             let recognize = VNRecognizeTextRequest()
-            recognize.recognitionLevel = .accurate
+            recognize.recognitionLevel = .fast
             recognize.usesLanguageCorrection = false
             try handler.perform([recognize])
             let observations = recognize.results ?? []
