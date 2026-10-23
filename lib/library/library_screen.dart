@@ -12,6 +12,7 @@ import 'gallery_selection.dart';
 
 import 'filtering.dart';
 import 'library_repository.dart';
+import 'scan_display.dart';
 import '../cleanup/cleanup_screen.dart';
 import '../cleanup/cleanup_controller.dart';
 import '../background/scan_runtime.dart';
@@ -386,10 +387,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         leading: Icon(category.icon, size: 20),
         title: Text(title ?? category.label, maxLines: 1,
           overflow: TextOverflow.ellipsis),
-        trailing: count > 0 ? Text('$count',
-            style: const TextStyle(fontWeight: FontWeight.bold)) :
-          (_cleanup.running ? const SizedBox(width: 12, height: 12,
-            child: CircularProgressIndicator(strokeWidth: 2)) : null),
+        // Category results may still be accumulating. Display the current
+        // numeric count, even when zero; only the scan control animates.
+        trailing: Text('$count',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         onTap: _deleting ? null :
           () => _chooseCleanup(category, closeDrawer: closeDrawer),
       ),
@@ -863,11 +864,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ? const SizedBox(width: 17, height: 17,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.auto_awesome_outlined, size: 19),
-              label: Text(_cleanup.running
-                  ? 'Scan ${(_cleanup.fraction * 100).round()}% · ${_cleanup.exactCount} duplicates'
-                  : _cleanup.completed
-                      ? '${_cleanup.exactCount} duplicates'
-                      : 'Intelligent Cleanup'),
+              label: Text(scanButtonLabel(
+                running: _cleanup.running,
+                completed: _cleanup.completed,
+                visited: _cleanup.visited,
+                total: _cleanup.total,
+              )),
             ),
           ),
           if (!isWide)
