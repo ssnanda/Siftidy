@@ -84,7 +84,10 @@ class CleanupScanner {
     final hashes = <String, String?>{};
     var skipped = checkpoint.skipped;
     var visited = restored.length;
-    var peopleAvailable = analyzePeople;
+    // Availability means Vision returned a real result, not merely that
+    // the toggle was enabled. A failed/absent bridge must not yield a zero.
+    var peopleAvailable = false;
+    var visionUsable = analyzePeople;
     String lastPhase = '';
     void reportPhase(String phase) {
       if (phase != lastPhase && !cancelled()) {
@@ -184,12 +187,13 @@ class CleanupScanner {
           .timeout(const Duration(seconds: 20));
       if (fingerprint == null) return const _ThumbnailAnalysis(null, null);
       bool? people;
-      if (analyzePeople && peopleAvailable) {
+      if (analyzePeople && visionUsable) {
         try {
           people = await _vision.invokeMethod<bool>('hasPeople', bytes)
               .timeout(const Duration(seconds: 15));
+          if (people != null) peopleAvailable = true;
         } on MissingPluginException {
-          peopleAvailable = false;
+          visionUsable = false;
         } on PlatformException {
           // Unknown result is not proof that no person is in the photo.
         }
@@ -227,6 +231,7 @@ class CleanupScanner {
                     ' / ${restored.length}');
               }
               years.add(cached.year);
+              if (cached.photo?.hasPeople != null) peopleAvailable = true;
               if (cached.photo != null &&
                   !protectedIds.contains(asset.id) &&
                   (year == null || cached.year == year)) {
