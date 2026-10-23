@@ -23,7 +23,7 @@ Siftidy is currently a **macOS-only hobby project**. iOS development and distrib
 
 **Important:** Deleting photos may sync deletions to iCloud Photos and other Apple devices. Photos normally moves them to Recently Deleted. Make backups before using deletion; estimated storage savings are not guaranteed.
 
-## Intelligent Cleanup (v0.2)
+## Existing intelligent-cleanup review tools (introduced in v0.2)
 
 Click the sparkles icon in the main toolbar, then **Scan Photos library**. Results
 are grouped into verified exact-byte duplicates, visual lookalikes, possibly blurry
@@ -32,6 +32,8 @@ photos and photos where Apple Vision found no face or human rectangle. The latte
 to Keepers or request deletion through Apple Photos. Scanning never deletes items,
 and existing Keepers are excluded from suggestions. Original-file hashing may
 cause Apple Photos to download iCloud originals; the scan can be stopped.
+
+The revised [roadmap](docs/ROADMAP.md) places **scan stability, scheduling, performance and history** at the center of v0.2. The already-shipped cleanup review tools remain available; **v0.3** focuses on Smart Organization and practical cleanup, while advanced bulk cleanup and intelligent recommendations move to **v0.4**.
 
 The macOS gallery opens in a larger, screen-aware window (up to 1450 × 950 points) and remembers subsequent user resizing.
 
@@ -128,8 +130,7 @@ the active speed; the menu bar also shows remaining manual Turbo minutes. Option
 **Auto Turbo after 10 minutes idle** requires AC power and automatically
 returns to the selected normal speed on user activity. Serious thermal
 pressure reduces the effective speed to Eco. Automatic Turbo is **off by
-default**. A scan does not keep a sleeping Mac awake. Results are maintained
-only while Siftidy remains running, not across **Quit Completely**.
+default**. A scan does not keep a sleeping Mac awake. In-progress scan analysis is checkpointed locally and can be restored on relaunch after **Quit Completely**; the current in-memory UI is reconstructed from the saved journal.
 
 Menu-bar operation removes the window from the screen and clears the gallery's
 decoded-image cache, but the Flutter engine and the in-progress scan remain
