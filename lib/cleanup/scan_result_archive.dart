@@ -84,7 +84,7 @@ class ScanResultArchive {
     required int total,
     required int analyzed,
     required CleanupGroups groups,
-    required bool peopleAnalyzed,
+    bool peopleAnalyzed = false,
   }) async {
     await folder.create(recursive: true);
     final id = 'scan-${started.microsecondsSinceEpoch}';
