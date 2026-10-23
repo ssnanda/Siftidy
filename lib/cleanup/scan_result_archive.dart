@@ -14,12 +14,17 @@ class ScanResultSnapshot {
     required this.analyzed,
     required this.groups,
     required this.bytes,
+    this.peopleAnalyzed,
   });
 
   final String id;
   final DateTime startedAt, savedAt;
   final int total, analyzed, bytes;
   final CleanupGroups groups;
+  /// Null for older snapshots; unknown is not a confirmed zero.
+  final bool? peopleAnalyzed;
+  String get scenesCountLabel => peopleAnalyzed == true || noPeopleCount > 0
+      ? '$noPeopleCount' : '—';
 
   int get exactCount => groups.exact.fold<int>(
       0, (value, group) => value + group.length - 1);
@@ -34,6 +39,7 @@ class ScanResultSnapshot {
     'started': startedAt.toIso8601String(),
     'saved': savedAt.toIso8601String(),
     'total': total, 'analyzed': analyzed,
+    'peopleAnalyzed': peopleAnalyzed,
     'exact': groups.exact, 'similar': groups.similar,
     'blurry': groups.blurry, 'noPeople': groups.noPeople,
   };
@@ -51,6 +57,7 @@ class ScanResultSnapshot {
       total: (data['total'] as num).toInt(),
       analyzed: (data['analyzed'] as num).toInt(),
       bytes: bytes,
+      peopleAnalyzed: data['peopleAnalyzed'] as bool?,
       groups: CleanupGroups(
         exact: lists('exact'), similar: lists('similar'),
         blurry: List<String>.from(data['blurry'] as List? ?? const []),
@@ -77,12 +84,14 @@ class ScanResultArchive {
     required int total,
     required int analyzed,
     required CleanupGroups groups,
+    required bool peopleAnalyzed,
   }) async {
     await folder.create(recursive: true);
     final id = 'scan-${started.microsecondsSinceEpoch}';
     final provisional = ScanResultSnapshot(
       id: id, startedAt: started, savedAt: DateTime.now(),
       total: total, analyzed: analyzed, groups: groups, bytes: 0,
+      peopleAnalyzed: peopleAnalyzed,
     );
     final target = _file(id);
     final temporary = File('${target.path}.tmp');
@@ -94,6 +103,7 @@ class ScanResultArchive {
       id: id, startedAt: provisional.startedAt,
       savedAt: provisional.savedAt, total: total,
       analyzed: analyzed, groups: groups, bytes: size,
+      peopleAnalyzed: peopleAnalyzed,
     );
   }
 
