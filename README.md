@@ -117,9 +117,14 @@ parallelizes *thumbnail decoding and Vision requests* in batches of up to four;
 photo-library writes/deletion remain user-driven and serial. A scan is never
 allowed to delete photos automatically.
 
-Choose **Turbo for 30, 60 or 120 minutes** from the menu. Once the Mac has
-been idle for 20 seconds, returning to keyboard/mouse activity switches back
-to the configured mode. Turbo also ends at its chosen timeout. Optional
+Choose **Turbo for 30, 60 or 120 minutes** from the menu. The selected
+Turbo deadline is saved on the Mac, so **Quit Completely** and relaunch restore
+Turbo when time remains on that original timer, without granting another full
+30/60/120 minutes. An expired timer returns to the saved normal speed.
+Once the Mac has been idle for 20 seconds, returning to keyboard/mouse
+activity switches back to the configured mode. Turbo also ends at its chosen
+timeout. The app and menu bar explicitly show **Running**, **Paused**, and
+the active speed; the menu bar also shows remaining manual Turbo minutes. Optional
 **Auto Turbo after 10 minutes idle** requires AC power and automatically
 returns to the selected normal speed on user activity. Serious thermal
 pressure reduces the effective speed to Eco. Automatic Turbo is **off by

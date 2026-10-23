@@ -65,9 +65,16 @@ class ScanRuntime extends ChangeNotifier {
   static const MethodChannel _menu = MethodChannel('siftidy/menu_bar');
   static const String _modeKey = 'scan_base_mode_v02';
   static const String _idleKey = 'scan_auto_turbo_idle_v02';
+  static const String _turboUntilKey = 'scan_manual_turbo_until_v02';
 
   ScanMode baseMode = ScanMode.eco;
   ScanMode activeMode = ScanMode.eco;
+  Duration? get manualTurboRemaining {
+    final deadline = _manualTurboUntil;
+    if (deadline == null) return null;
+    final remaining = deadline.difference(DateTime.now());
+    return remaining > Duration.zero ? remaining : null;
+  }
   bool autoTurboOnIdle = false;
   double processCpu = 0;
   double ramMb = 0;
@@ -75,7 +82,8 @@ class ScanRuntime extends ChangeNotifier {
   bool thermalLimited = false;
   double idleSeconds = 0;
   bool supported = false;
-  bool _initialized = false;
+  Future<void>? _initialization;
+  Future<void> _turboWrites = Future<void>.value();
   bool _attached = false;
   bool _closed = false;
   DateTime? _manualTurboUntil;
@@ -84,9 +92,9 @@ class ScanRuntime extends ChangeNotifier {
   ScanProgress Function()? progress;
   void Function(String action)? handleAction;
 
-  Future<void> initialize() async {
-    if (_initialized) return;
-    _initialized = true;
+  Future<void> initialize() => _initialization ??= _initializeOnce();
+
+  Future<void> _initializeOnce() async {
     final prefs = await SharedPreferences.getInstance();
     if (_closed) return;
     baseMode = ScanMode.values.firstWhere(
@@ -95,8 +103,34 @@ class ScanRuntime extends ChangeNotifier {
     );
     if (baseMode == ScanMode.turbo) baseMode = ScanMode.eco;
     autoTurboOnIdle = prefs.getBool(_idleKey) ?? false;
-    activeMode = baseMode;
+    final deadline = prefs.getInt(_turboUntilKey);
+    if (deadline != null) {
+      final restored = DateTime.fromMillisecondsSinceEpoch(deadline);
+      if (restored.isAfter(DateTime.now())) {
+        _manualTurboUntil = restored;
+        // Relaunching must not count as "returning from lunch". A fresh
+        // idle-to-input transition will still cancel manual Turbo.
+        _manualTurboSawIdle = false;
+      }
+    }
+    _reconcile();
     notifyListeners();
+  }
+
+  Future<void> _saveTurboDeadline(DateTime? deadline) {
+    // Serialize changes: a rapid Turbo -> Eco switch must not let a late
+    // Turbo write re-enable the mode on the next launch.
+    final write = _turboWrites.then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      if (deadline == null) {
+        await prefs.remove(_turboUntilKey);
+      } else {
+        await prefs.setInt(_turboUntilKey,
+            deadline.millisecondsSinceEpoch);
+      }
+    });
+    _turboWrites = write;
+    return write;
   }
 
   Future<void> attach({
@@ -116,7 +150,8 @@ class ScanRuntime extends ChangeNotifier {
         final choice = action.substring(5);
         if (choice.startsWith('turbo')) {
           final minutes = int.tryParse(choice.split(':').last) ?? 60;
-          activateTurbo(Duration(minutes: minutes.clamp(1, 120).toInt()));
+          await activateTurbo(
+              Duration(minutes: minutes.clamp(1, 120).toInt()));
         } else {
           final mode = ScanMode.values.where((m) => m.name == choice);
           if (mode.isNotEmpty) await setBaseMode(mode.first);
@@ -134,13 +169,14 @@ class ScanRuntime extends ChangeNotifier {
 
   Future<void> setBaseMode(ScanMode value) async {
     if (value == ScanMode.turbo) {
-      activateTurbo(const Duration(minutes: 60));
+      await activateTurbo(const Duration(minutes: 60));
       return;
     }
     _manualTurboUntil = null;
     _manualTurboSawIdle = false;
     baseMode = value;
     _reconcile();
+    await _saveTurboDeadline(null);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_modeKey, value.name);
     await sendStatus();
@@ -151,14 +187,17 @@ class ScanRuntime extends ChangeNotifier {
     _reconcile();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_idleKey, enabled);
+    await _turboWrites;
     await sendStatus();
   }
 
-  void activateTurbo(Duration duration) {
-    _manualTurboUntil = DateTime.now().add(duration);
+  Future<void> activateTurbo(Duration duration) async {
+    final deadline = DateTime.now().add(duration);
+    _manualTurboUntil = deadline;
     _manualTurboSawIdle = false;
     _reconcile();
-    sendStatus();
+    await _saveTurboDeadline(deadline);
+    await sendStatus();
   }
 
   void _reconcile() {
@@ -171,6 +210,7 @@ class ScanRuntime extends ChangeNotifier {
             (_manualTurboSawIdle && idleSeconds < 5))) {
       _manualTurboUntil = null;
       _manualTurboSawIdle = false;
+      unawaited(_saveTurboDeadline(null));
     }
     final newMode = thermalLimited
         ? ScanMode.eco
@@ -203,6 +243,7 @@ class ScanRuntime extends ChangeNotifier {
       // Transient system metrics failure must not interrupt Photos scanning.
     }
     _reconcile();
+    await _turboWrites;
     await sendStatus();
   }
 
@@ -223,6 +264,7 @@ class ScanRuntime extends ChangeNotifier {
         'ratePerMinute': p.photosPerMinute,
         'baseMode': baseMode.name,
         'activeMode': activeMode.name,
+        'turboSecondsRemaining': manualTurboRemaining?.inSeconds,
         'idleTurbo': autoTurboOnIdle,
         'cpu': processCpu,
         'ramMb': ramMb,

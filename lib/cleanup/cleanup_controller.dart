@@ -8,6 +8,9 @@ import '../background/scan_runtime.dart';
 
 /// Lives above the library tabs: switching views does not stop the scan.
 class CleanupController extends ChangeNotifier {
+  CleanupController() {
+    performance.addListener(_notify);
+  }
   final CleanupScanner _scanner = CleanupScanner();
   final ScanRuntime performance = ScanRuntime();
   ScanCheckpointStore? checkpointStore;
@@ -275,6 +278,7 @@ class CleanupController extends ChangeNotifier {
     _cancel = true;
     _scanGeneration++;
     _disposed = true;
+    performance.removeListener(_notify);
     performance.dispose();
     super.dispose();
   }

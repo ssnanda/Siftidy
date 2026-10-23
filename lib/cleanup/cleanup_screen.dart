@@ -498,8 +498,10 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
           ],
           Padding(padding: const EdgeInsets.only(top: 5), child: Text(
             controller.running
-                ? '${controller.visited} / ${controller.total} · '
-                  '${controller.paused ? "Paused" : _etaLabel(controller.eta)} '
+                ? '${controller.paused ? "PAUSED" : "RUNNING"} · '
+                  '${controller.performance.activeMode.title} · '
+                  '${controller.visited} / ${controller.total} · '
+                  '${controller.paused ? "Scan paused" : _etaLabel(controller.eta)} '
                   '· ${controller.analyzedCount} analyzed'
                 : controller.completed
                     ? 'Scan complete · ${controller.analyzedCount} analyzed '

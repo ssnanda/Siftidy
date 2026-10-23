@@ -171,8 +171,13 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     let isIdleEnabled = data["idleTurbo"] as? Bool ?? false
     let percent = total > 0 ? min(100, Int(Double(visited) * 100 / Double(total))) : 0
     let pending = max(0, total - visited)
-    let state = running ? (paused ? "Paused" : "Scanning") :
+    let state = running ? (paused ? "Paused" : "Running") :
                   (complete ? "Complete" : "Idle")
+    let stateSymbol = running ? (paused ? "⏸" : "▶") : (complete ? "✓" : "–")
+    let turboSeconds = data["turboSecondsRemaining"] as? Int
+    let speedLabel = mode == "turbo" && turboSeconds != nil
+      ? "Turbo · \(max(1, (turboSeconds! + 59) / 60))m left"
+      : mode.capitalized
     let cpuValue = data["cpu"] as? Double ?? cpu
     let ramValue = data["ramMb"] as? Double ?? 0
     let eta = data["etaSeconds"] as? Int
@@ -181,15 +186,15 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
     let durationMinutes = elapsedMs / 60000
     let etaDescription = eta == nil ? "Calculating" :
                          (eta! >= 60 ? "\(eta! / 60) min" : "\(eta!) sec")
-    statusItem?.button?.title = running ? "▧ \(percent)%" :
+    statusItem?.button?.title = running ? "\(stateSymbol) \(percent)%" :
       (complete ? "▧ ✓" : "▧ —")
     statusItem?.button?.toolTip =
       "Siftidy · \(state)\n" +
       "\(visited) scanned / \(pending) pending (\(total) total)\n" +
       "\(analyzed) analyzed · \(percent)% complete\n" +
       String(format: "CPU %.1f%% · RAM %.0f MB\n", cpuValue, ramValue) +
-      "Speed: \(mode.capitalized) · ETA: \(etaDescription)"
-    detailsItem?.title = "\(state) · \(percent)% · \(mode.capitalized)"
+      "Speed: \(speedLabel) · ETA: \(etaDescription)"
+    detailsItem?.title = "\(stateSymbol) \(state) · \(percent)% · \(speedLabel)"
     progressItem?.title = "\(visited) scanned · \(pending) pending · \(analyzed) analyzed"
     resourcesItem?.title = String(format: "CPU %.1f%% · RAM %.0f MB", cpuValue, ramValue)
     durationItem?.title = String(format: "Elapsed %dm · ETA %@ · %.0f/min",

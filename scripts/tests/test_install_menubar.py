@@ -32,6 +32,9 @@ class InstallMenuBarTests(unittest.TestCase):
             self.assertIn('Quit Completely', output)
             self.assertIn('ramMb', output)
             self.assertIn('idleSeconds', output)
+            self.assertIn('turboSecondsRemaining', output)
+            self.assertIn('Running', output)
+            self.assertIn('stateSymbol', output)
             self.assertFalse(installer.install(window))
             self.assertEqual(window.read_text(), output)
 
