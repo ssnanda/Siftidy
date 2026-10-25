@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Version bump using the highest published Git tag as the next-release floor.
-# Commit only pubspec.yaml; never sweep unrelated IDE/workstation changes.
+# Commit all local project changes with the release, matching the normal workflow.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 PUBSPEC_FILE="$ROOT_DIR/pubspec.yaml"
@@ -22,7 +22,7 @@ Usage:
   ./bin/bump-version.sh --version X.Y.Z+B [--yes] [--no-push]
 
 The patch default uses the newer of the local version and published version
-tags as a baseline. Only pubspec.yaml is committed by this script.
+tags as a baseline. All non-ignored local changes are committed and pushed.
 USAGE
 }
 get_version() { awk '/^version:/ { print $2; exit }' "$PUBSPEC_FILE"; }
@@ -147,18 +147,12 @@ if [[ -n "$LATEST" ]] &&
 fi
 
 if [[ "$YES" != true ]]; then
-  read -r -p "Bump to $NEXT_VERSION, commit version only, and push? [Y/n] " CONFIRM
+  read -r -p "Bump to $NEXT_VERSION, commit all changes, and push? [Y/n] " CONFIRM
   case "${CONFIRM:-y}" in y|Y|yes|YES) ;; *) echo "Cancelled"; exit 0 ;; esac
 fi
 
-# Don't include unrelated staged source changes in the version-only commit.
-if git diff --cached --name-only | grep -v '^pubspec.yaml$' | grep -q .; then
-  echo "Unrelated staged changes found. Commit or unstage them first." >&2
-  exit 1
-fi
-
 sed -i '' "s/^version: .*/version: $NEXT_VERSION/" "$PUBSPEC_FILE"
-git add -- pubspec.yaml
+git add -A
 git commit -m "Release $APP_NAME $NEXT_VERSION"
 echo "Version: $CURRENT_VERSION -> $NEXT_VERSION"
 
