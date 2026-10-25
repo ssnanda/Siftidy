@@ -74,7 +74,7 @@ flutter build macos --release \
   --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
 
 BUILT_APP="$(find build/macos/Build/Products/Release \
-  -maxdepth 1 -type d -name 'Siftidy.app' -print -quit)"
+  -maxdepth 1 -type d -name '*.app' -print -quit)"
 [[ -n "$BUILT_APP" ]] || {
   echo "Build finished without finding Siftidy.app" >&2; exit 1;
 }
