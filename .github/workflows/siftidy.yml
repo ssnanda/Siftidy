@@ -40,6 +40,9 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: bash -n scripts/bootstrap_apple.sh
+      - run: bash -n bin/*.sh
+      - run: ./bin/build-mac.sh --help
+      - run: ./bin/bump-version.sh --help
       - run: dart format lib test
       - run: flutter analyze
       - run: flutter test
