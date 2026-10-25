@@ -146,13 +146,27 @@ if [[ -n "$LATEST" ]] &&
   echo "GitHub will validate this commit but skip publishing a release." >&2
 fi
 
+if [[ "$DO_PUSH" == true ]]; then
+  ACTION="commit all local changes and push"
+else
+  ACTION="commit all local changes locally (no push)"
+fi
 if [[ "$YES" != true ]]; then
-  read -r -p "Bump to $NEXT_VERSION, commit all changes, and push? [Y/n] " CONFIRM
+  if [[ -n "$(git status --short)" ]]; then
+    echo "Other local changes that will be included:"
+    git status --short
+  fi
+  read -r -p "Bump to $NEXT_VERSION, $ACTION? [Y/n] " CONFIRM
   case "${CONFIRM:-y}" in y|Y|yes|YES) ;; *) echo "Cancelled"; exit 0 ;; esac
 fi
 
+# On macOS, sed -i requires an explicit empty backup suffix.
 sed -i '' "s/^version: .*/version: $NEXT_VERSION/" "$PUBSPEC_FILE"
 git add -A
+if git diff --cached --quiet; then
+  echo "Nothing changed; no commit created." >&2
+  exit 1
+fi
 git commit -m "Release $APP_NAME $NEXT_VERSION"
 echo "Version: $CURRENT_VERSION -> $NEXT_VERSION"
 
