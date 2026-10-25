@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
-# Safely pull main without deleting local IDE/generated changes.
+# Default: safely preserve local changes. -f: discard local edits and sync exactly to origin.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+FORCE=false
+usage() {
+  cat <<'HELP'
+Usage: ./bin/pull-latest.sh [-f|--force]
+
+Default: pull and restore existing local changes.
+-f, --force: discard ALL tracked changes, staged changes, and unpushed commits;
+             delete untracked files/directories; match origin branch.
+             Ignored build/cache files are kept.
+HELP
+}
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -f|--force) FORCE=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+  esac
+  shift
+done
 command -v git >/dev/null 2>&1 || {
   echo "Git is required." >&2; exit 1;
 }
@@ -22,6 +42,16 @@ if [[ -d "$(git rev-parse --git-path rebase-merge)" ||
       -n "$(git ls-files -u)" ]]; then
   echo "A merge, rebase, or conflict is already in progress. Resolve it first." >&2
   exit 1
+fi
+
+if [[ "$FORCE" == true ]]; then
+  echo "Force syncing origin/$BRANCH (discarding local changes and untracked files)..."
+  # Fetch first: a failed network request must NOT delete local work.
+  git fetch origin "$BRANCH"
+  git reset --hard FETCH_HEAD
+  git clean -fd
+  echo "Siftidy now matches origin/$BRANCH. Ignored files were kept."
+  exit 0
 fi
 
 STASHED=false
