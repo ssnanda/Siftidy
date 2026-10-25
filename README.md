@@ -43,6 +43,25 @@ The macOS gallery opens in a larger, screen-aware window (up to 1450 × 950 poin
 
 For local development, install Flutter, Xcode and CocoaPods, clone this repository, then run `./scripts/bootstrap_apple.sh` followed by `flutter run -d macos`. Run `flutter analyze` and `flutter test` for source checks.
 
+### Build locally
+
+On your Mac, run **`./bin/build-mac.sh`** from the repository root.
+It generates the macOS runner, builds a release `.app`, checks and creates
+the universal ZIP under `dist/`, and uses the exact `X.Y.Z+B` from
+`pubspec.yaml`. `./bin/build-mac.sh --open` launches the result;
+`--no-zip` only builds the app. It doesn't install over an existing app
+or publish to GitHub. Generated `pubspec.lock` is ignored; the build
+script restores your local `analysis_options.yaml` after runner generation.
+
+**Versioning:** `pubspec.yaml` is the source of truth for local builds and
+eligible GitHub releases. A push with a version not newer than the current
+GitHub release passes through validation but skips the expensive macOS
+publish job; choose a newer patch with `./bin/bump-version.sh` to release.
+The version bump tool checks the latest remote release tag, commits only
+`pubspec.yaml`, and doesn't accidentally include IDE-generated changes.
+`./bin/pull-latest.sh` safely stashes and restores local changes when pulling.
+
+
 ## Workflow
 
 The only workflow file is `.github/workflows/siftidy.yml`:

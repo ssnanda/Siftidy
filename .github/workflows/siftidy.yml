@@ -27,6 +27,10 @@ jobs:
     name: Analyze and test
     if: ${{ github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.task != 'cleanup') }}
     runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.version.outputs.release_version }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      release_ready: ${{ steps.version.outputs.release_ready }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +44,30 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Compare pubspec version with published releases
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RAW="$(sed -nE 's/^version: ([^[:space:]]+).*$/\1/p' pubspec.yaml)"
+          [[ "$RAW" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)$ ]] || {
+            echo "Invalid pubspec version: $RAW" >&2
+            exit 1
+          }
+          VERSION="${BASH_REMATCH[1]}"
+          NUMBER="${BASH_REMATCH[2]}"
+          echo "release_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$NUMBER" >> "$GITHUB_OUTPUT"
+          LATEST="$(gh release list --limit 100 --json tagName --jq '.[].tagName' | \
+            python3 -c 'import re,sys; nums=[tuple(map(int,m.groups())) for x in sys.stdin for m in [re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)",x.strip())] if m]; print(".".join(map(str,max(nums))) if nums else "")')"
+          export VERSION LATEST
+          READY="$(python3 -c 'import os; t=lambda s: tuple(map(int,s.split("."))); a=os.environ["LATEST"]; print("true" if not a or t(os.environ["VERSION"])>t(a) else "false")')"
+          echo "release_ready=$READY" >> "$GITHUB_OUTPUT"
+          if [[ "$READY" != true ]]; then
+            echo "::warning::Local version $VERSION is not newer than published v$LATEST; no macOS CI publish on push. Build locally with ./bin/build-mac.sh."
+          fi
       - name: Cleanup workdir
         if: always()
         run: rm -rf .dart_tool build dist artifacts
@@ -47,30 +75,23 @@ jobs:
   build-and-publish:
     name: Publish universal macOS
     needs: validate
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.task == 'release' || inputs.task == 'build')) }}
+    if: ${{ (github.event_name == 'push' && needs.validate.outputs.release_ready == 'true') || (github.event_name == 'workflow_dispatch' && (inputs.task == 'build' || (inputs.task == 'release' && needs.validate.outputs.release_ready == 'true'))) }}
     runs-on: macos-latest
     timeout-minutes: 85
     permissions:
       contents: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+      BUILD_NUMBER: ${{ needs.validate.outputs.build_number }}
+      RELEASE_TAG: v${{ needs.validate.outputs.release_version }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Choose next release version
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          BASE=$(sed -nE 's/^version: ([0-9]+)\.([0-9]+)\.[0-9]+.*/\1.\2/p' pubspec.yaml)
-          [[ "$BASE" =~ ^[0-9]+\.[0-9]+$ ]] || { echo 'Bad pubspec version'; exit 1; }
-          NEXT=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | \
-            awk -v base="$BASE" '$0 ~ "^v"base"[.][0-9]+$" {sub(/^v/, "", $0); split($0,a,"."); if (a[3]>max) max=a[3]} END {print max+1}')
-          echo "RELEASE_VERSION=$BASE.$NEXT" >> "$GITHUB_ENV"
-          echo "RELEASE_TAG=v$BASE.$NEXT" >> "$GITHUB_ENV"
-          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Generate Apple runners and Photos permissions
         run: ./scripts/bootstrap_apple.sh
       - name: Check updater tool paths on macOS
@@ -96,6 +117,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
       - name: Publish to GitHub Releases
+        id: publish
         if: ${{ github.event_name == 'push' || inputs.task == 'release' }}
         shell: bash
         env:
@@ -106,6 +128,7 @@ jobs:
             --target "$GITHUB_SHA" --title "Siftidy $RELEASE_VERSION" --latest \
             --notes "Universal macOS ZIP for Intel and Apple Silicon with an in-app ZIP updater. Not Apple Developer ID signed or notarized. Back up irreplaceable photos before testing."
           gh release view "$RELEASE_TAG" --json url,assets --jq '{url,assets:[.assets[].name]}'
+          echo 'published=true' >> "$GITHUB_OUTPUT"
       - name: Cleanup generated build directories
         if: always()
         run: rm -rf build dist .dart_tool macos
@@ -129,5 +152,5 @@ jobs:
       - name: Retain only latest successful build run
         env:
           GH_TOKEN: ${{ github.token }}
-          SIFTIDY_BUILD_PASSED: ${{ needs.validate.result == 'success' && needs.build-and-publish.result == 'success' && (github.event_name == 'push' || inputs.task == 'release') }}
+          SIFTIDY_BUILD_PASSED: ${{ needs.validate.result == 'success' && needs.build-and-publish.result == 'success' && needs.build-and-publish.outputs.published == 'true' }}
         run: python3 scripts/prune_workflows.py --artifact-days 2
