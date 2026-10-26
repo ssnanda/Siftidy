@@ -108,7 +108,8 @@ class DashboardHome extends StatelessWidget {
         : controller.starting ? 'Preparing scan'
         : controller.completed ? 'Completed'
         : controller.visited > 0 ? 'Ready to resume' : 'Ready to scan';
-    final completePercent = (controller.fraction * 100).round();
+    final completePercent = controller.completed
+        ? 100 : (controller.fraction * 100).round().clamp(0, 99);
     final color = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(26), children: [
       Row(children: [
@@ -248,10 +249,12 @@ class DashboardHome extends StatelessWidget {
               '${suggestion.count}', suggestion.description),
         ]);
       }),
-      if (controller.running) const Padding(
-        padding: EdgeInsets.only(top: 10),
-        child: Text('Results are provisional while a scan is still running.',
-          style: TextStyle(fontSize: 12)),
+      if (controller.running) Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(controller.showingPreviousResults
+            ? 'Showing the last completed results while this scan finishes.'
+            : 'Results are provisional while a scan is still running.',
+          style: const TextStyle(fontSize: 12)),
       ),
       const SizedBox(height: 28),
       RecentScanRuns(controller: controller,

@@ -10,10 +10,10 @@ import 'scan_result_archive.dart';
 import 'photo_analysis.dart';
 import '../background/scan_runtime.dart';
 
-/// Incremental scans publish indexing progress before they have rebuilt their
-/// groups. Keep the last completed suggestions visible until the final pass
-/// atomically replaces them with the newly classified result.
-CleanupScanResult mergeIncrementalProgress(
+/// Resumed and incremental scans publish indexing progress before rebuilding
+/// their groups. Keep the last completed suggestions visible until the final
+/// pass atomically replaces them with the newly classified result.
+CleanupScanResult mergeScanProgress(
   CleanupScanResult progress,
   CleanupScanResult? completed,
 ) {
@@ -58,6 +58,8 @@ class CleanupController extends ChangeNotifier {
   Future<void>? _preparingQuit;
   Completer<void>? _resumeSignal;
   String scanPhase = 'Idle';
+  int finalizationCurrent = 0;
+  int finalizationTotal = 0;
   static const _autoKey = 'cleanup_auto_scan_v02';
 
   CleanupScanResult? result;
@@ -69,6 +71,8 @@ class CleanupController extends ChangeNotifier {
   bool get busy => running || starting;
   bool paused = false;
   bool completed = false;
+  bool showingPreviousResults = false;
+  bool _hasSavedSnapshot = false;
   int? year;
   String? error;
   DateTime? _startedAt;
@@ -94,8 +98,15 @@ class CleanupController extends ChangeNotifier {
     return shown > saved ? shown : saved;
   }
   int get total => result?.total ?? checkpointStore?.current?.total ?? 0;
-  double get fraction => preparingFresh || total == 0
-      ? 0 : (visited / total).clamp(0.0, 1.0);
+  double get fraction {
+    if (preparingFresh || total == 0) return 0;
+    if (!running) return (visited / total).clamp(0.0, 1.0);
+    final photoProgress = (visited / total).clamp(0.0, 1.0) * .95;
+    if (visited < total || finalizationTotal == 0) return photoProgress;
+    final finalProgress =
+        (finalizationCurrent / finalizationTotal).clamp(0.0, 1.0) * .05;
+    return (photoProgress + finalProgress).clamp(0.0, .999);
+  }
   Duration? get eta => _eta;
   int get exactCount =>
       exact.fold(0, (n, group) => n + (group.length - 1));
@@ -160,25 +171,25 @@ class CleanupController extends ChangeNotifier {
         skipped: prior.skipped, peopleDetectionAvailable: false,
         years: const {},
       );
-      if (prior.complete) {
-        // Saved grouping files are fast to load. Do not launch another
-        // 49,000-photo restore/scan merely to populate Dashboard counts.
-        try {
-          final saved = await archive?.read(
-              'scan-${prior.started.microsecondsSinceEpoch}');
-          if (saved != null) {
-            result = CleanupScanResult(
-              photos: const {}, groups: saved.groups,
-              smartAnalyzed: saved.smartAnalyzed,
-              total: prior.total, visited: prior.visited,
-              skipped: prior.skipped,
-              peopleDetectionAvailable: saved.peopleAnalyzed == true,
-              years: const {},
-            );
-          }
-        } catch (_) {
-          // A damaged historical snapshot must not erase the checkpoint.
+      // A completed snapshot can still belong to this checkpoint after new
+      // photos mark it incomplete or the app pauses while refreshing it.
+      // Keep those results visible until the resumed scan finishes regrouping.
+      try {
+        final saved = await archive?.read(
+            'scan-${prior.started.microsecondsSinceEpoch}');
+        if (saved != null) {
+          _hasSavedSnapshot = true;
+          result = CleanupScanResult(
+            photos: const {}, groups: saved.groups,
+            smartAnalyzed: saved.smartAnalyzed,
+            total: prior.total, visited: prior.visited,
+            skipped: prior.skipped,
+            peopleDetectionAvailable: saved.peopleAnalyzed == true,
+            years: const {},
+          );
         }
+      } catch (_) {
+        // A damaged historical snapshot must not erase the checkpoint.
       }
     }
     autoScan = prefs.getBool(_autoKey) ?? true;
@@ -265,10 +276,11 @@ class CleanupController extends ChangeNotifier {
     }
     year = scopeYear;
     analyzingPeople = people ?? analyzingPeople;
-    final incrementalBaseline = incremental ? result : null;
     // Manual Scan again must produce a new timestamp, metrics and results.
     // The previous completed report and result file remain untouched.
     final fresh = checkpointStore?.current?.complete == true && !incremental;
+    final savedBaseline = !fresh && _hasSavedSnapshot ? result : null;
+    showingPreviousResults = savedBaseline != null;
     preparingFresh = fresh;
     _baselineVisited = fresh ? 0 : checkpointStore?.current?.year == year &&
             checkpointStore?.current?.people == analyzingPeople
@@ -291,6 +303,8 @@ class CleanupController extends ChangeNotifier {
     _dismissedSimilar.clear();
     _startedAt = DateTime.now();
     _eta = null;
+    finalizationCurrent = 0;
+    finalizationTotal = 0;
     _notify();
     try {
       final finalResult = await _scanner.scan(
@@ -300,6 +314,13 @@ class CleanupController extends ChangeNotifier {
         onPhase: (phase) {
           if (!_disposed && !_cancel && generation == _scanGeneration) {
             preparingFresh = false;
+            final match = RegExp(
+              r'^Checking property tours: ([0-9]+) / ([0-9]+)',
+            ).firstMatch(phase);
+            if (match != null) {
+              finalizationCurrent = int.parse(match.group(1)!);
+              finalizationTotal = int.parse(match.group(2)!);
+            }
             if (scanPhase != phase) {
               scanPhase = phase;
             }
@@ -313,7 +334,7 @@ class CleanupController extends ChangeNotifier {
         analyzePeople: analyzingPeople,
         onProgress: (snapshot) {
           if (_disposed || _cancel || generation != _scanGeneration) return;
-          result = mergeIncrementalProgress(snapshot, incrementalBaseline);
+          result = mergeScanProgress(snapshot, savedBaseline);
           if (snapshot.restoring) {
             resumeStatus = 'Restoring saved analysis: '
                 '${snapshot.restoredIndexed} / ${snapshot.restoredTotal} '
@@ -335,6 +356,8 @@ class CleanupController extends ChangeNotifier {
       );
       if (!_disposed && !_cancel && generation == _scanGeneration) {
         result = finalResult;
+        showingPreviousResults = false;
+        finalizationCurrent = finalizationTotal;
         _eta = null;
         final scan = checkpointStore?.current;
         if (scan != null) {
@@ -347,6 +370,7 @@ class CleanupController extends ChangeNotifier {
             peopleAnalyzed: scan.people &&
                 finalResult.peopleDetectionAvailable,
           );
+          _hasSavedSnapshot = true;
         }
         await checkpointStore?.finish('complete');
         completed = true;
@@ -524,9 +548,13 @@ class CleanupController extends ChangeNotifier {
     _releasePausedWorker();
     scanPhase = 'Scan results discarded';
     completed = false;
+    showingPreviousResults = false;
+    _hasSavedSnapshot = false;
     result = null;
     error = null;
     _eta = null;
+    finalizationCurrent = 0;
+    finalizationTotal = 0;
     _startedAt = null;
     resumeStatus = null;
     _excluded.clear();

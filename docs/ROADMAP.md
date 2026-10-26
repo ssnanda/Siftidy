@@ -44,6 +44,14 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
 
 ## 0.3 — Smart Organization + practical cleanup (current)
 
+### Active scan-results fixes
+
+1. [x] Keep the last completed suggestions visible during incremental scans.
+2. [x] Restore those suggestions when a paused scan resumes after relaunch.
+3. [x] Reserve the final 5% of progress for post-scan result finalization.
+4. [x] Checkpoint property-tour candidate progress and confirmed tours.
+5. [ ] Verify an interrupted full-library finalization in the packaged app.
+
 **Shipped for testing:** six result tiles; on-device possible lock-screen,
 near-blank and repeated-screenshot detection; 5+ consecutive property-photo
 sessions validated with Apple Vision; local editable tour names and explicit

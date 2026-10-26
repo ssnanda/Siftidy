@@ -1034,6 +1034,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               completed: _cleanup.completed,
               visited: _cleanup.visited,
               total: _cleanup.total,
+              fraction: _cleanup.fraction,
             ),
           ),
           if (!isWide)

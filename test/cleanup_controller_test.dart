@@ -73,6 +73,39 @@ void main() {
     }
   });
 
+  test('paused refresh restores its last completed result snapshot', () async {
+    SharedPreferences.setMockInitialValues({'cleanup_auto_scan_v02': false});
+    final directory = await Directory.systemTemp.createTemp('siftidy-paused-');
+    try {
+      final store = await ScanCheckpointStore.open(folder: directory);
+      final session = await store.begin(
+        year: null, people: false, total: 2);
+      await store.append([
+        const ScanRow('photo-1', 2026, 800, 600),
+        const ScanRow('photo-2', 2026, 800, 600),
+      ], mode: 'turbo', elapsedMs: 1000, cpu: 3, ram: 120);
+      await ScanResultArchive(directory).save(
+        started: session.started, total: 2, analyzed: 2,
+        groups: const CleanupGroups(
+          exact: [['photo-1', 'photo-2']],
+          similar: [], blurry: [], noPeople: [],
+        ));
+      await store.finish('complete');
+      await store.begin(year: null, people: false, total: 3);
+      await store.finish('paused');
+
+      final restored = await ScanCheckpointStore.open(folder: directory);
+      final controller = CleanupController()..checkpointStore = restored;
+      await controller.initialize();
+
+      expect(controller.completed, isFalse);
+      expect(controller.exactCount, 1);
+      controller.dispose();
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('corrupt metadata is preserved and cannot silently reset a scan',
       () async {
     SharedPreferences.setMockInitialValues({'cleanup_auto_scan_v02': true});
@@ -163,13 +196,27 @@ void main() {
       restoredTotal: 6,
     );
 
-    final visible = mergeIncrementalProgress(progress, completed);
+    final visible = mergeScanProgress(progress, completed);
 
     expect(visible.groups, same(completed.groups));
     expect(visible.total, 8);
     expect(visible.visited, 7);
     expect(visible.restoring, isTrue);
     expect(visible.peopleDetectionAvailable, isTrue);
+  });
+
+  test('finalization progress stays below complete and advances', () {
+    final controller = CleanupController()
+      ..result = fixture()
+      ..running = true;
+    expect(controller.fraction, closeTo(.95, .00001));
+
+    controller
+      ..finalizationCurrent = 5
+      ..finalizationTotal = 10;
+    expect(controller.fraction, closeTo(.975, .00001));
+    expect(controller.fraction, lessThan(1));
+    controller.dispose();
   });
 
   test('Keep all suppresses only the selected suggestion', () {

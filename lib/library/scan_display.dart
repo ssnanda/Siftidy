@@ -7,6 +7,7 @@ String scanButtonLabel({
   required bool completed,
   required int visited,
   required int total,
+  double? fraction,
 }) {
   if (!running && !completed && total <= 0) {
     return 'Intelligent Cleanup';
@@ -15,7 +16,7 @@ String scanButtonLabel({
       ? 100
       : total <= 0
           ? 0
-          : (100 * visited / total).round().clamp(0, 100);
+          : (100 * (fraction ?? visited / total)).round().clamp(0, 99);
   return 'Scan $percent%';
 }
 
@@ -28,6 +29,7 @@ class ScanProgressButton extends StatelessWidget {
     required this.completed,
     required this.visited,
     required this.total,
+    this.fraction,
     this.onPressed,
   });
 
@@ -35,6 +37,7 @@ class ScanProgressButton extends StatelessWidget {
   final bool completed;
   final int visited;
   final int total;
+  final double? fraction;
   final VoidCallback? onPressed;
 
   @override
@@ -46,6 +49,7 @@ class ScanProgressButton extends StatelessWidget {
         completed: completed,
         visited: visited,
         total: total,
+        fraction: fraction,
       )),
     );
   }

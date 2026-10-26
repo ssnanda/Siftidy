@@ -83,6 +83,29 @@ void main() {
     expect((await restarted.load())!.rows.keys, {'survivor'});
   });
 
+  test('property tour finalization resumes from its saved candidate',
+      () async {
+    final store = await ScanCheckpointStore.open(folder: folder);
+    await store.begin(year: null, people: false, total: 3);
+    const confirmed = PropertyTourSuggestion(
+      ids: ['home-1', 'home-2', 'home-3', 'home-4', 'home-5'],
+      startedAtMs: 1234,
+      latitude: 35.7,
+      longitude: -78.6,
+    );
+    await store.savePropertyTourProgress(
+      signature: 'candidate-set', cursor: 1500,
+      confirmed: const [confirmed]);
+
+    final restarted = await ScanCheckpointStore.open(folder: folder);
+    final restored = await restarted.load();
+
+    expect(restored!.propertyTourSignature, 'candidate-set');
+    expect(restored.propertyTourCursor, 1500);
+    expect(restored.confirmedPropertyTours.single.ids, confirmed.ids);
+    expect(restored.confirmedPropertyTours.single.latitude, 35.7);
+  });
+
   test('Scan again starts a new journal but retains completed history',
       () async {
     final store = await ScanCheckpointStore.open(folder: folder);

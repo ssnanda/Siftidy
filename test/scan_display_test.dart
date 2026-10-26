@@ -38,6 +38,15 @@ void main() {
     );
   });
 
+  test('finalization fraction keeps the top indicator below 100', () {
+    expect(
+      scanButtonLabel(
+        running: true, completed: false, visited: 49306, total: 49306,
+        fraction: .975),
+      'Scan 98%',
+    );
+  });
+
   test('completed scan remains a percent, never a duplicate count', () {
     expect(
       scanButtonLabel(

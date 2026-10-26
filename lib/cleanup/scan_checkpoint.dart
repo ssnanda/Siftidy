@@ -65,6 +65,9 @@ class ScanCheckpoint {
   int samples = 0;
   final Map<String, int> modes = {};
   final Map<String, ScanRow> rows = {};
+  String? propertyTourSignature;
+  int propertyTourCursor = 0;
+  final List<PropertyTourSuggestion> confirmedPropertyTours = [];
   int get visited => rows.length;
   int get analyzed => rows.values.where((r) => r.photo != null).length;
   int get skipped => rows.values.where((r) => r.skipped).length;
@@ -75,6 +78,18 @@ class ScanCheckpoint {
     'year': year, 'people': people, 'total': total, 'complete': complete,
     'elapsedMs': elapsedMs, 'cpuSum': cpuSum, 'peakRam': peakRam,
     'samples': samples, 'modes': modes,
+    if (propertyTourSignature != null) ...{
+      'propertyTourSignature': propertyTourSignature,
+      'propertyTourCursor': propertyTourCursor,
+      'confirmedPropertyTours': [
+        for (final tour in confirmedPropertyTours) {
+          'ids': tour.ids,
+          'start': tour.startedAtMs,
+          'lat': tour.latitude,
+          'lon': tour.longitude,
+        },
+      ],
+    },
   };
   factory ScanCheckpoint.fromJson(Map<String, dynamic> d) {
     final item = ScanCheckpoint(
@@ -87,6 +102,18 @@ class ScanCheckpoint {
     item.peakRam = (d['peakRam'] as num?)?.toDouble() ?? 0;
     item.samples = (d['samples'] as num?)?.toInt() ?? 0;
     item.modes.addAll(Map<String, int>.from(d['modes'] as Map? ?? {}));
+    item.propertyTourSignature = d['propertyTourSignature'] as String?;
+    item.propertyTourCursor =
+        (d['propertyTourCursor'] as num?)?.toInt() ?? 0;
+    item.confirmedPropertyTours.addAll([
+      for (final value in d['confirmedPropertyTours'] as List? ?? const [])
+        PropertyTourSuggestion(
+          ids: List<String>.from((value as Map)['ids'] as List),
+          startedAtMs: (value['start'] as num).toInt(),
+          latitude: (value['lat'] as num?)?.toDouble(),
+          longitude: (value['lon'] as num?)?.toDouble(),
+        ),
+    ]);
     return item;
   }
 }
@@ -210,6 +237,22 @@ class ScanCheckpointStore {
 
   /// Wait until every committed batch is flushed before terminating the app.
   Future<void> flush() => _pendingAppend;
+
+  Future<void> savePropertyTourProgress({
+    required String signature,
+    required int cursor,
+    required List<PropertyTourSuggestion> confirmed,
+  }) async {
+    await _pendingAppend;
+    final scan = current;
+    if (scan == null) return;
+    scan.propertyTourSignature = signature;
+    scan.propertyTourCursor = cursor;
+    scan.confirmedPropertyTours
+      ..clear()
+      ..addAll(confirmed);
+    await _writeState(scan);
+  }
 
   Future<void> finish(String status) async {
     // Final reports and explicit discard wait for the in-flight journal

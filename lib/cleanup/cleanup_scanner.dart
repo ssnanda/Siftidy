@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -155,7 +156,22 @@ class CleanupScanner {
       if (finalPass && !cancelled()) {
         reportPhase('Finding property tours');
         final candidateTours = propertySessionCandidates(scanned);
-        final confirmedTours = <PropertyTourSuggestion>[];
+        final signature = sha1.convert(utf8.encode(candidateTours.map((tour) =>
+          '${tour.startedAtMs}:${tour.ids.join(",")}').join('|'))).toString();
+        final savedScan = checkpointStore.current;
+        final canResumeTours = savedScan?.propertyTourSignature == signature;
+        var propertyTourCursor = canResumeTours
+            ? savedScan!.propertyTourCursor
+                .clamp(0, candidateTours.length).toInt()
+            : 0;
+        final confirmedTours = canResumeTours
+            ? List<PropertyTourSuggestion>.of(
+                savedScan!.confirmedPropertyTours)
+            : <PropertyTourSuggestion>[];
+        if (!canResumeTours) {
+          await checkpointStore.savePropertyTourProgress(
+            signature: signature, cursor: 0, confirmed: const []);
+        }
         // First cheaply sample each session to avoid full-library Vision
         // passes over birthdays, vacations, and other unrelated sequences.
         // Promising tours then get checked *frame by frame*: nobody may
@@ -192,7 +208,7 @@ class CleanupScanner {
         }
 
         const parallelPhotos = 6;
-        for (var sessionIndex = 0;
+        for (var sessionIndex = propertyTourCursor;
             sessionIndex < candidateTours.length && !cancelled();
             sessionIndex++) {
           await waitIfPaused();
@@ -211,7 +227,15 @@ class CleanupScanner {
           final possible = sample.where((kind) =>
               kind == PropertySceneKind.property ||
               kind == PropertySceneKind.neutralInterior).length;
-          if (strong < 2 || possible < 3) { continue; }
+          if (strong < 2 || possible < 3) {
+            propertyTourCursor = sessionIndex + 1;
+            if (propertyTourCursor % 10 == 0) {
+              await checkpointStore.savePropertyTourProgress(
+                signature: signature, cursor: propertyTourCursor,
+                confirmed: confirmedTours);
+            }
+            continue;
+          }
 
           // No artificial maximum tour length or 90-minute total cap.
           // A candidate may contain hundreds of frames if it really is
@@ -224,7 +248,16 @@ class CleanupScanner {
           }
           if (cancelled()) { break; }
           confirmedTours.addAll(confirmedPropertyTourRuns(tour, checked));
+          propertyTourCursor = sessionIndex + 1;
+          if (propertyTourCursor % 10 == 0) {
+            await checkpointStore.savePropertyTourProgress(
+              signature: signature, cursor: propertyTourCursor,
+              confirmed: confirmedTours);
+          }
         }
+        await checkpointStore.savePropertyTourProgress(
+          signature: signature, cursor: propertyTourCursor,
+          confirmed: confirmedTours);
         if (!cancelled()) {
           groups = groups.withPropertyTours(confirmedTours);
           smartAnalyzed = true;
