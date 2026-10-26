@@ -76,8 +76,13 @@ if [[ "$UPLOAD" == true ]]; then
     echo "Git is required to identify the release source." >&2
     exit 1
   }
-  if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-    echo "Commit tracked changes before uploading a release." >&2
+  # Flutter regenerates analysis_options.yaml during bootstrap.
+  # Don't reject a clean release solely because that file changed.
+  DIRTY_SOURCE="$(git status --porcelain --untracked-files=no |
+    grep -vE '^.. analysis_options[.]yaml$' || true)"
+  if [[ -n "$DIRTY_SOURCE" ]]; then
+    echo "Commit these tracked changes before uploading a release:" >&2
+    printf '%s\n' "$DIRTY_SOURCE" >&2
     echo "Or use --no-upload to build locally." >&2
     exit 1
   fi
@@ -169,7 +174,7 @@ if [[ "$UPLOAD" == true ]]; then
   echo "Published: https://github.com/$RELEASE_REPO/releases/tag/$RELEASE_TAG"
 fi
 
-if [[ "$OPEN_APP" == true ]];
+if [[ "$OPEN_APP" == true ]]; then
   open "$BUILT_APP"
 fi
 
