@@ -4,6 +4,7 @@
 Flutter regenerates MainFlutterWindow.swift at every bootstrap. Keep all
 native functionality reproducible without committing generated Xcode files.
 """
+import re
 from pathlib import Path
 
 MARKER = "// Siftidy menu bar and scan performance bridge v0.2"
@@ -362,16 +363,27 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
 }
 '''
 
+def silence_unused_menu_items(source: str) -> str:
+    # In Swift, addItem returns NSMenuItem. Only bare calls discard that
+    # result; assigned entries (scanItem, modeItems, etc.) stay unchanged.
+    return re.sub(r"(?m)^([ \\t]+)(addItem\\()", r"\\1_ = \\2", source)
+
+
 def install(path: Path) -> bool:
     source = path.read_text()
     if MARKER in source:
+        # flutter create may keep the generated Swift runner across builds.
+        # Upgrade existing installations rather than skipping the fix.
+        cleaned = silence_unused_menu_items(source)
+        if cleaned != source:
+            path.write_text(cleaned)
         return False
     needle = "RegisterGeneratedPlugins(registry: flutterViewController)"
     if source.count(needle) != 1 or "import Cocoa" not in source:
         raise RuntimeError("Unsupported generated Flutter window template")
     source = source.replace("import Cocoa", "import Cocoa\nimport IOKit.ps\nimport Darwin", 1)
     source = source.replace(needle, needle + "\n" + BOOT, 1)
-    path.write_text(source + SWIFT)
+    path.write_text(source + silence_unused_menu_items(SWIFT))
     return True
 
 

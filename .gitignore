@@ -26,3 +26,9 @@ coverage/
 # flutter pub get regenerates this local dependency lockfile. The repository
 # currently tracks pubspec.yaml dependency constraints, not workstation locks.
 /pubspec.lock
+
+# Local Flutter/IDE artifacts and packaged builds (never commit these).
+/.metadata
+/.idea/
+*.iml
+/dist/
