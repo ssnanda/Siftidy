@@ -66,6 +66,10 @@ bridge = r'''
                                  "living room", "dining room", "kitchen",
                                  "staircase", "hallway", "corridor",
                                  "shower", "bathtub", "toilet",
+                                 "garage", "garage door", "driveway",
+                                 "porch", "deck", "patio", "yard",
+                                 "house exterior", "building exterior",
+                                 "facade", "front door", "entryway",
                                  "residential", "house interior",
                                  "house", "apartment", "real estate",
                                  "home interior", "interior design"]

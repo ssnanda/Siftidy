@@ -72,10 +72,10 @@ Suggestion pipeline:
    change address, split/merge sessions, label "Listing", "Move-in" or
    "Move-out", or reject a suggestion. Never infer a specific inspection
    type solely from capture order.
-7. GPS alone gives coordinates, **not a postal address**. Reverse geocoding
-   may contact a provider. It must be user-enabled, documented, and never
-   silently transmit private photo coordinates. Cache accepted addresses
-   locally; otherwise display an approximate coordinates/location label.
+7. GPS alone gives coordinates, **not a postal address**. Opening Property
+   Tours reverse-geocodes detected tour coordinates with Apple, as disclosed
+   in that view, and caches returned addresses locally. Manual edits remain
+   local; tours without GPS stay explicitly unassigned.
 8. Do **not** create property-specific folders automatically or move/delete
    originals. Keep photo references in the user's local catalog, with manual
    organization later, and allow a photo to belong to multiple collections.

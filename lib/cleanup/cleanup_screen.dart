@@ -13,6 +13,27 @@ import 'scan_history_view.dart';
 
 enum CleanupCategory { exact, similar, blurry, noPeople, accidental, propertyTours }
 
+List<String> cleanupCategorySizeIds(
+    CleanupController controller, CleanupCategory category) => switch (category) {
+  CleanupCategory.exact => [
+    for (final group in controller.exact) ...group.skip(1),
+  ],
+  CleanupCategory.similar => [
+    for (final group in controller.similar) ...group.skip(1),
+  ],
+  CleanupCategory.blurry => controller.blurry,
+  CleanupCategory.noPeople => controller.noPeople,
+  CleanupCategory.accidental => controller.accidentalScreenshots,
+  CleanupCategory.propertyTours => [
+    for (final tour in controller.propertyTours) ...tour.ids,
+  ],
+};
+
+Set<String> allCleanupSuggestionIds(CleanupController controller) => {
+  for (final category in CleanupCategory.values)
+    ...cleanupCategorySizeIds(controller, category),
+};
+
 extension CleanupCategoryLabel on CleanupCategory {
   String get label => switch (this) {
         CleanupCategory.exact => 'Exact duplicates',

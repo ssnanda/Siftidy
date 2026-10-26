@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:siftidy/cleanup/photo_analysis.dart';
+import 'package:siftidy/cleanup/property_tours_view.dart';
 
 const ms = 1000;
 PhotoFingerprint finger({int value = 95}) => PhotoFingerprint(
@@ -209,5 +210,23 @@ void main() {
     expect(tours, hasLength(1));
     expect(tours.single.latitude, isNull);
     expect(tours.single.longitude, isNull);
+  });
+
+  test('dated visits to one address group under the same property', () {
+    const older = PropertyTourSuggestion(
+      ids: ['old-1', 'old-2', 'old-3', 'old-4', 'old-5'],
+      startedAtMs: 1000, latitude: 35.1, longitude: -80.1);
+    const newer = PropertyTourSuggestion(
+      ids: ['new-1', 'new-2', 'new-3', 'new-4', 'new-5'],
+      startedAtMs: 2000, latitude: 35.1, longitude: -80.1);
+
+    final groups = groupPropertyTours(const [older, newer], const {
+      'old-1': '6822 Trimbach Way',
+      'new-1': '6822 Trimbach Way',
+    });
+
+    expect(groups, hasLength(1));
+    expect(groups.single.title, '6822 Trimbach Way');
+    expect(groups.single.tours, [newer, older]);
   });
 }

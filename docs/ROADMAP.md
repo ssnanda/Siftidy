@@ -55,6 +55,14 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
 7. [x] Keep a deleted active history row hidden until new results complete.
 8. [ ] Verify an interrupted full-library finalization in the packaged app.
 
+### Property organization and result sizes
+
+1. [x] Show measured original size per cleanup category and unique total.
+2. [x] Resolve GPS-backed tour addresses with Apple and cache them locally.
+3. [x] Group repeated dated tours beneath their property/address.
+4. [x] Recognize garages, driveways, porches and residential exteriors.
+5. [ ] Verify 6822 Trimbach Way and 958 Plaza Walk after a fresh scan.
+
 **Shipped for testing:** six result tiles; on-device possible lock-screen,
 near-blank and repeated-screenshot detection; 5+ consecutive property-photo
 sessions validated with Apple Vision; local editable tour names and explicit

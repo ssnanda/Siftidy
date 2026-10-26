@@ -38,6 +38,7 @@ class _LibraryScreenState extends State<LibraryScreen>
   static const Duration _photoRefreshInterval = Duration(minutes: 5);
   Timer? _photoRefreshTimer;
   bool _checkingPhotoLibrary = false;
+  bool _preparingCleanupSizes = false;
   static const int _pageSize = 50;
   final LibraryRepository _repository = LibraryRepository();
   final MediaSizes _sizes = MediaSizes.instance;
@@ -105,7 +106,32 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   void _onCleanupChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      unawaited(_prepareCleanupSizes());
+    }
+  }
+
+  Future<void> _prepareCleanupSizes() async {
+    if (_preparingCleanupSizes || _cleanup.busy || !mounted) return;
+    final ids = allCleanupSuggestionIds(_cleanup);
+    if (ids.isEmpty) return;
+    if (ids.every((id) =>
+        _sizes.bytesFor(id) != null || _sizes.isPending(id))) {
+      return;
+    }
+    _preparingCleanupSizes = true;
+    try {
+      await _cleanup.restorePhotoReferences(ids);
+      if (!mounted) return;
+      final photos = _cleanup.result?.photos ?? const {};
+      _sizes.inspect([
+        for (final id in ids)
+          if (photos[id] != null) photos[id]!,
+      ]);
+    } finally {
+      _preparingCleanupSizes = false;
+    }
   }
 
   void _chooseCleanup(CleanupCategory category, {bool closeDrawer = false}) {
@@ -527,14 +553,20 @@ class _LibraryScreenState extends State<LibraryScreen>
           overflow: TextOverflow.ellipsis),
         // Category results may still be accumulating. Display the current
         // numeric count, even when zero; only the scan control animates.
-        trailing: Text((category == CleanupCategory.noPeople &&
-                (_cleanup.result?.peopleDetectionAvailable != true ||
-                    !_cleanup.analyzingPeople)) ||
-                ((category == CleanupCategory.accidental ||
-                    category == CleanupCategory.propertyTours) &&
-                    _cleanup.result?.smartAnalyzed != true)
-            ? '—' : '$count',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        trailing: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text((category == CleanupCategory.noPeople &&
+                  (_cleanup.result?.peopleDetectionAvailable != true ||
+                      !_cleanup.analyzingPeople)) ||
+                  ((category == CleanupCategory.accidental ||
+                      category == CleanupCategory.propertyTours) &&
+                      _cleanup.result?.smartAnalyzed != true)
+              ? '—' : '$count',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(sizeSummaryLabel(summarizeSizes(
+            cleanupCategorySizeIds(_cleanup, category), _sizes)),
+            style: const TextStyle(fontSize: 9)),
+        ]),
         onTap: _deleting ? null :
           () => _chooseCleanup(category, closeDrawer: closeDrawer),
       ),
@@ -645,6 +677,11 @@ class _LibraryScreenState extends State<LibraryScreen>
         child: Text('SIFTIDY TOOLS', style: TextStyle(
           fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
         )),
+      ),
+      Padding(padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+        child: Text('Total: ${sizeSummaryLabel(summarizeSizes(
+          allCleanupSuggestionIds(_cleanup), _sizes))}',
+          style: const TextStyle(fontSize: 11)),
       ),
       Expanded(child: ListView(children: [
         for (final category in CleanupCategory.values)

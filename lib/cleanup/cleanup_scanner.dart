@@ -228,7 +228,10 @@ class CleanupScanner {
           final possible = sample.where((kind) =>
               kind == PropertySceneKind.property ||
               kind == PropertySceneKind.neutralInterior).length;
-          if (strong < 2 || possible < 3) {
+          // One strong frame plus supporting interiors justifies full
+          // inspection. Final acceptance still checks every frame and
+          // requires at least three residential positives.
+          if (strong < 1 || possible < 3) {
             propertyTourCursor = sessionIndex + 1;
             if (propertyTourCursor % 10 == 0) {
               await checkpointStore.savePropertyTourProgress(

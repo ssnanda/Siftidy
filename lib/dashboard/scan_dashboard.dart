@@ -7,6 +7,7 @@ import '../cleanup/cleanup_controller.dart';
 import '../background/scan_runtime.dart';
 import '../cleanup/cleanup_screen.dart';
 import '../cleanup/scan_result_archive.dart';
+import '../cleanup/media_sizes.dart';
 
 String scanDuration(int milliseconds) {
   final elapsed = Duration(milliseconds: milliseconds);
@@ -249,6 +250,13 @@ class DashboardHome extends StatelessWidget {
               '${suggestion.count}', suggestion.description),
         ]);
       }),
+      if (visibleDashboardSuggestions(controller).isNotEmpty) Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text('Total unique result size: ${sizeSummaryLabel(
+          summarizeSizes(allCleanupSuggestionIds(controller),
+            MediaSizes.instance))}',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      ),
       if (controller.running) Padding(
         padding: const EdgeInsets.only(top: 10),
         child: Text(controller.showingPreviousResults
@@ -270,6 +278,8 @@ class DashboardHome extends StatelessWidget {
   Widget _resultTile(BuildContext context, double width,
       CleanupCategory category, String count, String description) {
     final colors = Theme.of(context).colorScheme;
+    final size = sizeSummaryLabel(summarizeSizes(
+      cleanupCategorySizeIds(controller, category), MediaSizes.instance));
     return SizedBox(width: width, child: Card(
       margin: EdgeInsets.zero, clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -286,6 +296,9 @@ class DashboardHome extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(description, maxLines: 2, style:
                     const TextStyle(fontSize: 12)),
+                const SizedBox(height: 3),
+                Text(size, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11)),
               ],
             )),
             const SizedBox(width: 10),

@@ -43,6 +43,14 @@ class _PropertyToursViewState extends State<PropertyToursView> {
         if (prefs.getBool('property_rejected_$id') == true) { _rejected.add(id); }
       }
     });
+    for (final tour in widget.tours) {
+      if (!mounted) return;
+      final key = _key(tour);
+      if (!_rejected.contains(key) && !_labels.containsKey(key) &&
+          tour.latitude != null && tour.longitude != null) {
+        await _lookupAddress(tour, automatic: true);
+      }
+    }
   }
 
   @override
@@ -77,7 +85,8 @@ class _PropertyToursViewState extends State<PropertyToursView> {
     if (mounted) { setState(() => _rejected.add(key)); }
   }
 
-  Future<void> _lookupAddress(PropertyTourSuggestion tour) async {
+  Future<void> _lookupAddress(PropertyTourSuggestion tour,
+      {bool automatic = false}) async {
     if (tour.latitude == null || tour.longitude == null) { return; }
     final key = _key(tour);
     setState(() { _busyTour = key; _message = null; });
@@ -96,6 +105,9 @@ class _PropertyToursViewState extends State<PropertyToursView> {
           TextEditingController(text: _labels[key] ?? ''))
           .text = address;
       await _save(tour);
+      if (automatic && mounted) {
+        setState(() => _message = null);
+      }
     } on PlatformException catch (error) {
       if (mounted) { setState(() => _message =
           'Address lookup failed: ${error.message ?? error.code}'); }
@@ -111,6 +123,7 @@ class _PropertyToursViewState extends State<PropertyToursView> {
   Widget build(BuildContext context) {
     final visible = widget.tours.where(
         (tour) => !_rejected.contains(_key(tour))).toList();
+    final properties = groupPropertyTours(visible, _labels);
     return ListView(padding: const EdgeInsets.all(18), children: [
       Text('Property tours', style: Theme.of(context).textTheme.headlineSmall),
       const SizedBox(height: 5),
@@ -118,8 +131,8 @@ class _PropertyToursViewState extends State<PropertyToursView> {
           'using on-device visual classification. They are suggestions, '
           'not new Apple Photos albums. No photos are moved or deleted.'),
       const SizedBox(height: 8),
-      const Text('Addresses stay on this Mac. Apple address lookup is '
-          'optional and sends only the selected GPS coordinates.'),
+      const Text('GPS coordinates for detected tours are looked up with Apple. '
+          'Resolved addresses and edits stay on this Mac.'),
       if (_message != null) Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(_message!)),
@@ -127,8 +140,19 @@ class _PropertyToursViewState extends State<PropertyToursView> {
         padding: EdgeInsets.all(20),
         child: Text('No suggested property tours in this scan. '
             'Try scanning a series of at least five home/interior photos.')),
-      for (final tour in visible)
-        _tourCard(context, tour),
+      for (final property in properties)
+        Card(margin: const EdgeInsets.symmetric(vertical: 8), child:
+          ExpansionTile(
+            initiallyExpanded: properties.length == 1,
+            title: Text(property.title),
+            subtitle: Text('${property.tours.length} ${
+              property.tours.length == 1 ? "tour" : "tours"} · ${
+              property.tours.fold<int>(0, (n, tour) => n + tour.ids.length)} photos'),
+            childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            children: [
+              for (final tour in property.tours) _tourCard(context, tour),
+            ],
+          )),
     ]);
   }
 
@@ -142,7 +166,7 @@ class _PropertyToursViewState extends State<PropertyToursView> {
         : 'No location metadata';
     final editor = _editors.putIfAbsent(key, () =>
         TextEditingController(text: label ?? ''));
-    return Card(margin: const EdgeInsets.symmetric(vertical: 8), child:
+    return Card(margin: const EdgeInsets.symmetric(vertical: 5), child:
       ExpansionTile(
         title: Text(label == null || label.isEmpty
             ? 'Property tour · ${tour.ids.length} photos' : label),
@@ -194,6 +218,45 @@ class _PropertyToursViewState extends State<PropertyToursView> {
       ),
     );
   }
+}
+
+class PropertyTourGroup {
+  const PropertyTourGroup(this.key, this.title, this.tours);
+  final String key;
+  final String title;
+  final List<PropertyTourSuggestion> tours;
+}
+
+List<PropertyTourGroup> groupPropertyTours(
+    Iterable<PropertyTourSuggestion> tours, Map<String, String> labels) {
+  final grouped = <String, List<PropertyTourSuggestion>>{};
+  final titles = <String, String>{};
+  for (final tour in tours) {
+    final label = labels[tour.ids.first]?.trim();
+    final hasLabel = label != null && label.isNotEmpty;
+    final coordinate = tour.latitude != null && tour.longitude != null
+        ? '${tour.latitude!.toStringAsFixed(3)},${tour.longitude!.toStringAsFixed(3)}'
+        : null;
+    final key = hasLabel
+        ? 'address:${label.toLowerCase()}'
+        : coordinate != null
+            ? 'location:$coordinate'
+            : 'unassigned:${tour.ids.first}';
+    final title = hasLabel
+        ? label
+        : coordinate != null
+            ? 'Property near $coordinate'
+            : 'Needs address';
+    grouped.putIfAbsent(key, () => []).add(tour);
+    titles[key] = title;
+  }
+  final result = [
+    for (final entry in grouped.entries)
+      PropertyTourGroup(entry.key, titles[entry.key]!, entry.value
+        ..sort((a, b) => b.startedAtMs.compareTo(a.startedAtMs))),
+  ];
+  result.sort((a, b) => a.title.compareTo(b.title));
+  return result;
 }
 
 class _TourThumbnail extends StatefulWidget {

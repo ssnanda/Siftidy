@@ -88,6 +88,25 @@ void main() {
     controller.dispose();
   });
 
+  test('category size IDs use duplicate extras and a unique total', () {
+    final controller = CleanupController();
+    controller.result = scan(groups: const CleanupGroups(
+      exact: [['keep-exact', 'delete-exact']],
+      similar: [['keep-similar', 'delete-similar', 'shared']],
+      blurry: ['shared'],
+      noPeople: [],
+      accidentalScreenshots: ['screenshot'],
+    ), smartAnalyzed: true);
+
+    expect(cleanupCategorySizeIds(controller, CleanupCategory.exact),
+        ['delete-exact']);
+    expect(cleanupCategorySizeIds(controller, CleanupCategory.similar),
+        ['delete-similar', 'shared']);
+    expect(allCleanupSuggestionIds(controller),
+        {'delete-exact', 'delete-similar', 'shared', 'screenshot'});
+    controller.dispose();
+  });
+
   test('recent scans omit zeros and missing smart results but retain positives',
       () {
     ScanResultSnapshot snapshot(CleanupGroups groups, {bool smart = false}) =>
