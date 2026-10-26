@@ -366,7 +366,7 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
 def silence_unused_menu_items(source: str) -> str:
     # In Swift, addItem returns NSMenuItem. Only bare calls discard that
     # result; assigned entries (scanItem, modeItems, etc.) stay unchanged.
-    return re.sub(r"(?m)^([ \\t]+)(addItem\\()", r"\\1_ = \\2", source)
+    return re.sub(r"(?m)^([ \t]+)(addItem\()", r"\1_ = \2", source)
 
 
 def install(path: Path) -> bool:
