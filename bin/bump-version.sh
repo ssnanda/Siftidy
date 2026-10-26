@@ -167,7 +167,7 @@ if git diff --cached --quiet; then
   echo "Nothing changed; no commit created." >&2
   exit 1
 fi
-git commit -m "Release $APP_NAME $NEXT_VERSION"
+git commit -m "Release $APP_NAME $NEXT_VERSION [skip ci]"
 echo "Version: $CURRENT_VERSION -> $NEXT_VERSION"
 
 if [[ "$DO_PUSH" == true ]]; then
