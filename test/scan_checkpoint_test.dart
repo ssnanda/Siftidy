@@ -94,7 +94,7 @@ void main() {
       longitude: -78.6,
     );
     await store.savePropertyTourProgress(
-      signature: 'candidate-set', cursor: 1500,
+      signature: 'candidate-set', cursor: 1500, total: 2498,
       confirmed: const [confirmed]);
 
     final restarted = await ScanCheckpointStore.open(folder: folder);
@@ -102,8 +102,38 @@ void main() {
 
     expect(restored!.propertyTourSignature, 'candidate-set');
     expect(restored.propertyTourCursor, 1500);
+    expect(restored.propertyTourCandidateTotal, 2498);
     expect(restored.confirmedPropertyTours.single.ids, confirmed.ids);
     expect(restored.confirmedPropertyTours.single.latitude, 35.7);
+  });
+
+  test('explicit pause survives relaunch until the user resumes', () async {
+    final store = await ScanCheckpointStore.open(folder: folder);
+    await store.begin(year: null, people: false, total: 100);
+    await store.setUserPaused(true);
+
+    final restarted = await ScanCheckpointStore.open(folder: folder);
+    expect((await restarted.load())!.userPaused, isTrue);
+
+    await restarted.setUserPaused(false);
+    final resumed = await ScanCheckpointStore.open(folder: folder);
+    expect((await resumed.load())!.userPaused, isFalse);
+  });
+
+  test('deleted active history stays hidden until new results complete',
+      () async {
+    final store = await ScanCheckpointStore.open(folder: folder);
+    final scan = await store.begin(year: null, people: false, total: 10);
+    await store.finish('paused');
+    expect(await store.readHistory(), hasLength(1));
+
+    await store.deleteHistoryEntry(scan.started.toIso8601String());
+    await store.finish('paused');
+    expect(await store.readHistory(), isEmpty);
+
+    await store.finish('complete');
+    expect(await store.readHistory(), hasLength(1));
+    expect((await store.readHistory()).single['status'], 'complete');
   });
 
   test('Scan again starts a new journal but retains completed history',

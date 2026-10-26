@@ -170,7 +170,8 @@ class CleanupScanner {
             : <PropertyTourSuggestion>[];
         if (!canResumeTours) {
           await checkpointStore.savePropertyTourProgress(
-            signature: signature, cursor: 0, confirmed: const []);
+            signature: signature, cursor: 0, total: candidateTours.length,
+            confirmed: const []);
         }
         // First cheaply sample each session to avoid full-library Vision
         // passes over birthdays, vacations, and other unrelated sequences.
@@ -232,6 +233,7 @@ class CleanupScanner {
             if (propertyTourCursor % 10 == 0) {
               await checkpointStore.savePropertyTourProgress(
                 signature: signature, cursor: propertyTourCursor,
+                total: candidateTours.length,
                 confirmed: confirmedTours);
             }
             continue;
@@ -252,11 +254,13 @@ class CleanupScanner {
           if (propertyTourCursor % 10 == 0) {
             await checkpointStore.savePropertyTourProgress(
               signature: signature, cursor: propertyTourCursor,
+              total: candidateTours.length,
               confirmed: confirmedTours);
           }
         }
         await checkpointStore.savePropertyTourProgress(
           signature: signature, cursor: propertyTourCursor,
+          total: candidateTours.length,
           confirmed: confirmedTours);
         if (!cancelled()) {
           groups = groups.withPropertyTours(confirmedTours);

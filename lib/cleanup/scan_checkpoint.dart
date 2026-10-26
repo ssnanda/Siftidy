@@ -67,6 +67,9 @@ class ScanCheckpoint {
   final Map<String, ScanRow> rows = {};
   String? propertyTourSignature;
   int propertyTourCursor = 0;
+  int propertyTourCandidateTotal = 0;
+  bool userPaused = false;
+  bool historyHidden = false;
   final List<PropertyTourSuggestion> confirmedPropertyTours = [];
   int get visited => rows.length;
   int get analyzed => rows.values.where((r) => r.photo != null).length;
@@ -77,10 +80,12 @@ class ScanCheckpoint {
     'schema': 1, 'algorithm': 3, 'started': started.toIso8601String(),
     'year': year, 'people': people, 'total': total, 'complete': complete,
     'elapsedMs': elapsedMs, 'cpuSum': cpuSum, 'peakRam': peakRam,
-    'samples': samples, 'modes': modes,
+    'samples': samples, 'modes': modes, 'userPaused': userPaused,
+    'historyHidden': historyHidden,
     if (propertyTourSignature != null) ...{
       'propertyTourSignature': propertyTourSignature,
       'propertyTourCursor': propertyTourCursor,
+      'propertyTourCandidateTotal': propertyTourCandidateTotal,
       'confirmedPropertyTours': [
         for (final tour in confirmedPropertyTours) {
           'ids': tour.ids,
@@ -105,6 +110,10 @@ class ScanCheckpoint {
     item.propertyTourSignature = d['propertyTourSignature'] as String?;
     item.propertyTourCursor =
         (d['propertyTourCursor'] as num?)?.toInt() ?? 0;
+    item.propertyTourCandidateTotal =
+        (d['propertyTourCandidateTotal'] as num?)?.toInt() ?? 0;
+    item.userPaused = d['userPaused'] == true;
+    item.historyHidden = d['historyHidden'] == true;
     item.confirmedPropertyTours.addAll([
       for (final value in d['confirmedPropertyTours'] as List? ?? const [])
         PropertyTourSuggestion(
@@ -241,6 +250,7 @@ class ScanCheckpointStore {
   Future<void> savePropertyTourProgress({
     required String signature,
     required int cursor,
+    required int total,
     required List<PropertyTourSuggestion> confirmed,
   }) async {
     await _pendingAppend;
@@ -248,10 +258,22 @@ class ScanCheckpointStore {
     if (scan == null) return;
     scan.propertyTourSignature = signature;
     scan.propertyTourCursor = cursor;
+    scan.propertyTourCandidateTotal = total;
     scan.confirmedPropertyTours
       ..clear()
       ..addAll(confirmed);
     await _writeState(scan);
+  }
+
+  Future<void> setUserPaused(bool paused) {
+    final write = _pendingAppend.then((_) async {
+      final scan = current;
+      if (scan == null) return;
+      scan.userPaused = paused;
+      await _writeState(scan);
+    });
+    _pendingAppend = write;
+    return write;
   }
 
   Future<void> finish(String status) async {
@@ -262,18 +284,21 @@ class ScanCheckpointStore {
     if (scan == null) { return; }
     if (status == 'complete') {
       scan.complete = true;
+      scan.historyHidden = false;
       await _writeState(scan);
     }
     final history = await readHistory();
     history.removeWhere((r) => r['start'] == scan.started.toIso8601String());
-    history.insert(0, {
-      'start': scan.started.toIso8601String(),
-      'end': DateTime.now().toIso8601String(),
-      'status': status, 'total': scan.total, 'visited': scan.visited,
-      'analyzed': scan.analyzed, 'skipped': scan.skipped,
-      'elapsedMs': scan.elapsedMs, 'averageCpu': scan.averageCpu,
-      'peakRam': scan.peakRam, 'modes': Map.of(scan.modes),
-    });
+    if (!scan.historyHidden) {
+      history.insert(0, {
+        'start': scan.started.toIso8601String(),
+        'end': DateTime.now().toIso8601String(),
+        'status': status, 'total': scan.total, 'visited': scan.visited,
+        'analyzed': scan.analyzed, 'skipped': scan.skipped,
+        'elapsedMs': scan.elapsedMs, 'averageCpu': scan.averageCpu,
+        'peakRam': scan.peakRam, 'modes': Map.of(scan.modes),
+      });
+    }
     await _atomic(_history, jsonEncode(history.take(30).toList()));
   }
 
@@ -310,6 +335,11 @@ class ScanCheckpointStore {
     await _pendingAppend;
     final history = await readHistory();
     history.removeWhere((item) => item['start'] == started);
+    final scan = current;
+    if (scan != null && scan.started.toIso8601String() == started) {
+      scan.historyHidden = true;
+      await _writeState(scan);
+    }
     await _atomic(_history, jsonEncode(history));
   }
 

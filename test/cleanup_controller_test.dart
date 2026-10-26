@@ -106,6 +106,29 @@ void main() {
     }
   });
 
+  test('explicitly paused checkpoint does not auto-resume on launch',
+      () async {
+    SharedPreferences.setMockInitialValues({'cleanup_auto_scan_v02': true});
+    final directory = await Directory.systemTemp.createTemp('siftidy-hold-');
+    try {
+      final store = await ScanCheckpointStore.open(folder: directory);
+      await store.begin(year: null, people: false, total: 100);
+      await store.setUserPaused(true);
+
+      final restored = await ScanCheckpointStore.open(folder: directory);
+      final controller = CleanupController()..checkpointStore = restored;
+      await controller.initialize();
+      await controller.startIfEnabled(const {});
+
+      expect(controller.paused, isTrue);
+      expect(controller.running, isFalse);
+      expect(controller.scanRevision, 0);
+      controller.dispose();
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('corrupt metadata is preserved and cannot silently reset a scan',
       () async {
     SharedPreferences.setMockInitialValues({'cleanup_auto_scan_v02': true});

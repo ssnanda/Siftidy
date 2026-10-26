@@ -187,6 +187,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         running: _cleanup.running,
         paused: _cleanup.paused,
         complete: _cleanup.completed,
+        fraction: _cleanup.fraction,
         eta: _cleanup.eta,
       ),
       onPrepareQuit: _cleanup.pauseAndSaveForQuit,
@@ -232,7 +233,9 @@ class _LibraryScreenState extends State<LibraryScreen>
   /// the iCloud library actually changed.
   Future<void> _checkForNewPhotos() async {
     if (_checkingPhotoLibrary || !mounted || _deleting || _loading ||
-        _permission?.hasAccess != true) return;
+        _permission?.hasAccess != true) {
+      return;
+    }
     _checkingPhotoLibrary = true;
     try {
       await _cleanup.initialize();

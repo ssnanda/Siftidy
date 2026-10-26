@@ -163,6 +163,9 @@ class CleanupController extends ChangeNotifier {
       year = prior.year;
       analyzingPeople = prior.people;
       completed = prior.complete;
+      paused = prior.userPaused;
+      finalizationCurrent = prior.propertyTourCursor;
+      finalizationTotal = prior.propertyTourCandidateTotal;
       _baselineVisited = prior.visited;
       result = CleanupScanResult(
         photos: const {}, groups: const CleanupGroups(
@@ -210,7 +213,7 @@ class CleanupController extends ChangeNotifier {
   Future<void> startIfEnabled(Set<String> protectedIds) async {
     _protected = Set<String>.of(protectedIds);
     await initialize();
-    if (autoScan && !busy && !_cancel &&
+    if (autoScan && !busy && !_cancel && !paused &&
         checkpointStore?.current?.complete != true &&
         checkpointStore?.recoveryIssue == null) {
       // Resume incomplete work or start the first scan. Completed sessions
@@ -281,6 +284,7 @@ class CleanupController extends ChangeNotifier {
     final fresh = checkpointStore?.current?.complete == true && !incremental;
     final savedBaseline = !fresh && _hasSavedSnapshot ? result : null;
     showingPreviousResults = savedBaseline != null;
+    await checkpointStore?.setUserPaused(false);
     preparingFresh = fresh;
     _baselineVisited = fresh ? 0 : checkpointStore?.current?.year == year &&
             checkpointStore?.current?.people == analyzingPeople
@@ -321,8 +325,19 @@ class CleanupController extends ChangeNotifier {
               finalizationCurrent = int.parse(match.group(1)!);
               finalizationTotal = int.parse(match.group(2)!);
             }
-            if (scanPhase != phase) {
-              scanPhase = phase;
+            final saved = checkpointStore?.current;
+            final restoringFinalization =
+                saved != null && saved.propertyTourCursor > 0 &&
+                saved.propertyTourCandidateTotal > 0 &&
+                (phase == 'Reading Photos library' ||
+                 phase == 'Restoring saved photo references');
+            final displayedPhase = restoringFinalization
+                ? 'Restoring saved scan before property tours: '
+                    '${saved.propertyTourCursor} / '
+                    '${saved.propertyTourCandidateTotal}'
+                : phase;
+            if (scanPhase != displayedPhase) {
+              scanPhase = displayedPhase;
             }
             _notify();
           }
@@ -373,6 +388,7 @@ class CleanupController extends ChangeNotifier {
           _hasSavedSnapshot = true;
         }
         await checkpointStore?.finish('complete');
+        await checkpointStore?.setUserPaused(false);
         completed = true;
       }
     } catch (e) {
@@ -494,6 +510,7 @@ class CleanupController extends ChangeNotifier {
   void pauseOrResume() {
     if (!running) return;
     paused = !paused;
+    unawaited(checkpointStore?.setUserPaused(paused));
     if (paused) {
       _resumeSignal ??= Completer<void>();
       scanPhase = 'Pausing after current photo operation';
@@ -507,6 +524,7 @@ class CleanupController extends ChangeNotifier {
   void stop() {
     _cancel = true;
     paused = false;
+    unawaited(checkpointStore?.setUserPaused(false));
     _releasePausedWorker();
     scanPhase = 'Stopping';
     _notify();

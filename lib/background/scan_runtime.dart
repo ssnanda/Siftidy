@@ -44,6 +44,7 @@ class ScanProgress {
     required this.running,
     required this.paused,
     required this.complete,
+    required this.fraction,
     this.eta,
     this.elapsedMs = 0,
     this.photosPerMinute = 0,
@@ -57,6 +58,7 @@ class ScanProgress {
   final bool running;
   final bool paused;
   final bool complete;
+  final double fraction;
   final Duration? eta;
   final int elapsedMs;
   final double photosPerMinute;
@@ -277,6 +279,7 @@ class ScanRuntime extends ChangeNotifier {
         'running': p.running,
         'paused': p.paused,
         'complete': p.complete,
+        'fraction': p.fraction,
         'etaSeconds': p.eta?.inSeconds,
         'elapsedMs': p.elapsedMs,
         'ratePerMinute': p.photosPerMinute,

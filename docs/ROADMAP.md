@@ -50,7 +50,10 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
 2. [x] Restore those suggestions when a paused scan resumes after relaunch.
 3. [x] Reserve the final 5% of progress for post-scan result finalization.
 4. [x] Checkpoint property-tour candidate progress and confirmed tours.
-5. [ ] Verify an interrupted full-library finalization in the packaged app.
+5. [x] Use the same finalization percentage in the window and menu bar.
+6. [x] Persist an explicit user Pause across relaunches.
+7. [x] Keep a deleted active history row hidden until new results complete.
+8. [ ] Verify an interrupted full-library finalization in the packaged app.
 
 **Shipped for testing:** six result tiles; on-device possible lock-screen,
 near-blank and repeated-screenshot detection; 5+ consecutive property-photo

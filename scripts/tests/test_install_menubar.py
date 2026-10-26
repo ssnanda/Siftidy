@@ -35,6 +35,8 @@ class InstallMenuBarTests(unittest.TestCase):
             self.assertIn('turboSecondsRemaining', output)
             self.assertIn('Running', output)
             self.assertIn('stateSymbol', output)
+            self.assertIn('data["fraction"] as? Double', output)
+            self.assertIn('complete ? 100 : min(99', output)
             self.assertFalse(installer.install(window))
             self.assertEqual(window.read_text(), output)
 
