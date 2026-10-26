@@ -33,7 +33,11 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> {
+class _LibraryScreenState extends State<LibraryScreen>
+    with WidgetsBindingObserver {
+  static const Duration _photoRefreshInterval = Duration(minutes: 5);
+  Timer? _photoRefreshTimer;
+  bool _checkingPhotoLibrary = false;
   static const int _pageSize = 50;
   final LibraryRepository _repository = LibraryRepository();
   final MediaSizes _sizes = MediaSizes.instance;
@@ -162,6 +166,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _photoRefreshTimer = Timer.periodic(
+      _photoRefreshInterval, (_) => unawaited(_checkForNewPhotos()),
+    );
     _scroll.addListener(_onScroll);
     _cleanup.addListener(_onCleanupChanged);
     _sizes.addListener(_onCleanupChanged);
@@ -214,7 +222,53 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_checkForNewPhotos());
+    }
+  }
+
+  /// Light PhotoKit count check: no thumbnails, hashes, or AI work unless
+  /// the iCloud library actually changed.
+  Future<void> _checkForNewPhotos() async {
+    if (_checkingPhotoLibrary || !mounted || _deleting || _loading ||
+        _permission?.hasAccess != true) return;
+    _checkingPhotoLibrary = true;
+    try {
+      await _cleanup.initialize();
+      if (!mounted) return;
+      final all = await _repository.openAll(
+        type: RequestType.image, oldestFirst: false,
+      );
+      final photoCount = all == null ? 0 : await _repository.count(all);
+      if (!mounted) return;
+      final prior = _cleanup.checkpointStore?.current;
+      if (_cleanup.autoScan && !_cleanup.busy && prior?.complete == true &&
+          prior!.total != photoCount) {
+        unawaited(_cleanup.startIncremental(_keeperIds));
+      }
+
+      // Update the visible gallery when the current album gains new photos.
+      // Don't disturb selection, deletion, or active pagination.
+      final album = _album;
+      if (album != null && !_loading && !_loadingMore && !_deleting &&
+          _selected.isEmpty) {
+        final visibleCount = await _repository.count(album);
+        if (mounted && !_loading && visibleCount != _libraryCount) {
+          unawaited(_reload());
+        }
+      }
+    } catch (_) {
+      // iCloud/PhotoKit may be unavailable transiently; retry next interval.
+    } finally {
+      _checkingPhotoLibrary = false;
+    }
+  }
+
+  @override
   void dispose() {
+    _photoRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _generation++;
     _cleanup.removeListener(_onCleanupChanged);
     _sizes.removeListener(_onCleanupChanged);
@@ -335,7 +389,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       await _fetchNext(generation);
       if (mounted && generation == _generation) {
         // Start a progressive scan quietly; browsing remains available.
-        _cleanup.startIfEnabled(_keeperIds);
+        unawaited(_cleanup.startIfEnabled(_keeperIds));
+        unawaited(_checkForNewPhotos());
       }
     } catch (error) {
       if (!mounted || generation != _generation) return;

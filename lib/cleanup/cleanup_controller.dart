@@ -186,12 +186,34 @@ class CleanupController extends ChangeNotifier {
     }
   }
 
-  Future<void> start({int? scopeYear, bool? people}) async {
+  /// Append newly synced iCloud photos to an existing completed scan.
+  /// PhotoKit IDs and saved fingerprints are reused, so only new assets
+  /// need image analysis. Manual Scan still starts a fresh session.
+  Future<void> startIncremental(Set<String> protectedIds) async {
+    await initialize();
+    if (_disposed || busy || !autoScan ||
+        checkpointStore?.current?.complete != true ||
+        checkpointStore?.recoveryIssue != null) {
+      return;
+    }
+    _protected = Set<String>.of(protectedIds);
+    await start(
+      scopeYear: checkpointStore!.current!.year,
+      people: checkpointStore!.current!.people,
+      incremental: true,
+    );
+  }
+
+  Future<void> start({
+    int? scopeYear, bool? people, bool incremental = false,
+  }) async {
     if (busy) return;
     starting = true;
     _notify();
     try {
-      await _runScan(scopeYear: scopeYear, people: people);
+      await _runScan(
+        scopeYear: scopeYear, people: people, incremental: incremental,
+      );
     } catch (e) {
       if (!_disposed) {
         error = '$e';
@@ -205,7 +227,9 @@ class CleanupController extends ChangeNotifier {
     }
   }
 
-  Future<void> _runScan({int? scopeYear, bool? people}) async {
+  Future<void> _runScan({
+    int? scopeYear, bool? people, bool incremental = false,
+  }) async {
     final generation = ++_scanGeneration;
     _cancel = false;
     await _discardPending;
@@ -220,7 +244,7 @@ class CleanupController extends ChangeNotifier {
     analyzingPeople = people ?? analyzingPeople;
     // Manual Scan again must produce a new timestamp, metrics and results.
     // The previous completed report and result file remain untouched.
-    final fresh = checkpointStore?.current?.complete == true;
+    final fresh = checkpointStore?.current?.complete == true && !incremental;
     preparingFresh = fresh;
     _baselineVisited = fresh ? 0 : checkpointStore?.current?.year == year &&
             checkpointStore?.current?.people == analyzingPeople

@@ -161,24 +161,35 @@ class _UpdateButtonState extends State<UpdateButton> {
     final canInstall = hasUpdate && _status?.downloadUrl != null &&
         _status?.sha256 != null && !_installing;
 
-    return PopupMenuButton<_UpdateAction>(
-      tooltip: hasUpdate ? 'Siftidy update available' : 'Siftidy updates',
-      offset: const Offset(0, 42),
-      position: PopupMenuPosition.under,
-      onSelected: _choose,
-      icon: _checking || _installing
-          ? SizedBox(
-              width: 19,
-              height: 19,
-              child: CircularProgressIndicator(strokeWidth: 2,
-                  color: statusColor),
-            )
-          : Icon(
-              Icons.system_update_outlined,
-              color: statusColor,
-              size: 25,
-            ),
-      itemBuilder: (context) => [
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: _checking ? 'Checking…' : 'Check for updates',
+          onPressed: _checking || _installing ? null : _check,
+          icon: _checking || _installing
+              ? SizedBox(
+                  width: 19,
+                  height: 19,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2, color: statusColor,
+                  ),
+                )
+              : Icon(
+                  Icons.system_update_outlined,
+                  color: statusColor,
+                  size: 25,
+                ),
+        ),
+        PopupMenuButton<_UpdateAction>(
+          tooltip: 'Update settings',
+          offset: const Offset(0, 42),
+          padding: EdgeInsets.zero,
+          iconSize: 20,
+          position: PopupMenuPosition.under,
+          onSelected: _choose,
+          icon: const Icon(Icons.arrow_drop_down),
+          itemBuilder: (context) => [
         PopupMenuItem<_UpdateAction>(
           enabled: false,
           child: SizedBox(
@@ -236,6 +247,8 @@ class _UpdateButtonState extends State<UpdateButton> {
         const PopupMenuItem<_UpdateAction>(
           value: _UpdateAction.privacy,
           child: Text('Privacy & Security'),
+        ),
+          ],
         ),
       ],
     );
