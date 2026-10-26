@@ -38,6 +38,71 @@ class InstallMenuBarTests(unittest.TestCase):
             self.assertFalse(installer.install(window))
             self.assertEqual(window.read_text(), output)
 
+    def test_dock_activation_restores_hidden_window(self):
+        source = installer.SWIFT
+        self.assertIn("func showWindowIfHidden()", source)
+        self.assertIn("NSApplication.didBecomeActiveNotification", source)
+        self.assertNotIn("NSApp.setActivationPolicy(.accessory)", source)
+        self.assertIn('if command == "open" {', source)
+
+    def test_upgrades_previous_generated_window(self):
+        old = installer.SWIFT.replace(
+            "  private var activationObserver: NSObjectProtocol?\\n", ""
+        )
+        old = old.replace(
+            '''    setupMenu()
+    // Dock/app switcher activation must reopen a window hidden to the tray.
+    // A weak capture avoids keeping the singleton alive through the observer.
+    if activationObserver == nil {
+      activationObserver = NotificationCenter.default.addObserver(
+        forName: NSApplication.didBecomeActiveNotification,
+        object: NSApp, queue: .main
+      ) { [weak self] _ in
+        self?.showWindowIfHidden()
+      }
+    }
+    update([:])''',
+            '    setupMenu()\\n    update([:])',
+        )
+        old = old.replace(
+            '''  func showWindowIfHidden() {
+    guard let window = appWindow else { return }
+    if window.isVisible && !window.isMiniaturized { return }
+    if window.isMiniaturized { window.deminiaturize(nil) }
+    NSApp.setActivationPolicy(.regular)
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  func hideToMenuBar() {
+    appWindow?.orderOut(nil)
+    channel?.invokeMethod("action", arguments: "windowHidden")
+    // Keep the Dock icon so clicking it can restore the app normally.
+  }''',
+            '''  func hideToMenuBar() {
+    appWindow?.orderOut(nil)
+    channel?.invokeMethod("action", arguments: "windowHidden")
+    NSApp.setActivationPolicy(.accessory)
+  }''',
+        )
+        old = old.replace(
+            '''    if command == "open" {
+      showWindowIfHidden()
+      return
+    }''',
+            '''    if command == "open" {
+      NSApp.setActivationPolicy(.regular)
+      appWindow?.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+      return
+    }''',
+        )
+        upgraded = installer.upgrade_existing_menu(old)
+        self.assertIn("func showWindowIfHidden()", upgraded)
+        self.assertIn("NSApplication.didBecomeActiveNotification", upgraded)
+        self.assertNotIn("NSApp.setActivationPolicy(.accessory)", upgraded)
+        self.assertEqual(upgraded, installer.upgrade_existing_menu(upgraded))
+
     def test_quit_offers_graceful_pause_with_hard_20_second_deadline(self):
         source = installer.SWIFT
         self.assertIn('alert.addButton(withTitle: "Pause & Quit")', source)

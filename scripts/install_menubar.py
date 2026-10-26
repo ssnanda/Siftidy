@@ -85,7 +85,9 @@ final class SiftidyMenuBar: NSObject, NSWindowDelegate {
   }
 
   func showWindowIfHidden() {
-    guard let window = appWindow, !window.isVisible else { return }
+    guard let window = appWindow else { return }
+    if window.isVisible && !window.isMiniaturized { return }
+    if window.isMiniaturized { window.deminiaturize(nil) }
     NSApp.setActivationPolicy(.regular)
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
@@ -391,12 +393,12 @@ def upgrade_existing_menu(source: str) -> str:
     if "private var activationObserver: NSObjectProtocol?" not in source:
         source = source.replace(
             "  private var statusItem: NSStatusItem?",
-            "  private var statusItem: NSStatusItem?\\n"
+            "  private var statusItem: NSStatusItem?\n"
             "  private var activationObserver: NSObjectProtocol?", 1,
         )
     if "func showWindowIfHidden()" not in source:
         source = source.replace(
-            '    setupMenu()\\n    update([:])',
+            '    setupMenu()\n    update([:])',
             '''    setupMenu()
     if activationObserver == nil {
       activationObserver = NotificationCenter.default.addObserver(
