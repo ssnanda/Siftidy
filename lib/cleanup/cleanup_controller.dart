@@ -10,6 +10,29 @@ import 'scan_result_archive.dart';
 import 'photo_analysis.dart';
 import '../background/scan_runtime.dart';
 
+/// Incremental scans publish indexing progress before they have rebuilt their
+/// groups. Keep the last completed suggestions visible until the final pass
+/// atomically replaces them with the newly classified result.
+CleanupScanResult mergeIncrementalProgress(
+  CleanupScanResult progress,
+  CleanupScanResult? completed,
+) {
+  if (completed == null) return progress;
+  return CleanupScanResult(
+    photos: progress.photos,
+    groups: completed.groups,
+    total: progress.total,
+    visited: progress.visited,
+    skipped: progress.skipped,
+    peopleDetectionAvailable: completed.peopleDetectionAvailable,
+    smartAnalyzed: completed.smartAnalyzed,
+    years: progress.years,
+    restoring: progress.restoring,
+    restoredIndexed: progress.restoredIndexed,
+    restoredTotal: progress.restoredTotal,
+  );
+}
+
 /// Lives above the library tabs: switching views does not stop the scan.
 class CleanupController extends ChangeNotifier {
   CleanupController() {
@@ -242,6 +265,7 @@ class CleanupController extends ChangeNotifier {
     }
     year = scopeYear;
     analyzingPeople = people ?? analyzingPeople;
+    final incrementalBaseline = incremental ? result : null;
     // Manual Scan again must produce a new timestamp, metrics and results.
     // The previous completed report and result file remain untouched.
     final fresh = checkpointStore?.current?.complete == true && !incremental;
@@ -289,7 +313,7 @@ class CleanupController extends ChangeNotifier {
         analyzePeople: analyzingPeople,
         onProgress: (snapshot) {
           if (_disposed || _cancel || generation != _scanGeneration) return;
-          result = snapshot;
+          result = mergeIncrementalProgress(snapshot, incrementalBaseline);
           if (snapshot.restoring) {
             resumeStatus = 'Restoring saved analysis: '
                 '${snapshot.restoredIndexed} / ${snapshot.restoredTotal} '

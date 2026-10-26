@@ -167,7 +167,7 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
               '${item.analyzed} analyzed · ${scanFileSize(item.bytes)}'),
           ],
         )),
-        const Chip(label: Text('Read only')),
+        const Chip(label: Text('History preview · Read only')),
       ])),
       SingleChildScrollView(scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -250,9 +250,9 @@ class _SavedSnapshotViewState extends State<SavedSnapshotView> {
             },
           )),
       const Padding(padding: EdgeInsets.all(10),
-        child: Text('Saved results are references to your Photos library. '
-          'Review is read-only; deleting a scan record only deletes '
-          'Siftidy’s result file.', style: TextStyle(fontSize: 11))),
+        child: Text('Historical results cannot change your Photos library. '
+          'Deleting this record removes only Siftidy’s result file.',
+          style: TextStyle(fontSize: 11))),
     ]);
   }
 }

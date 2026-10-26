@@ -145,6 +145,33 @@ void main() {
     years: {2026},
   );
 
+  test('incremental progress retains the completed suggestions', () {
+    final completed = fixture();
+    const progress = CleanupScanResult(
+      photos: {},
+      groups: CleanupGroups(
+        exact: [], similar: [], blurry: [], noPeople: [],
+      ),
+      total: 8,
+      visited: 7,
+      skipped: 1,
+      peopleDetectionAvailable: false,
+      smartAnalyzed: false,
+      years: {2026},
+      restoring: true,
+      restoredIndexed: 6,
+      restoredTotal: 6,
+    );
+
+    final visible = mergeIncrementalProgress(progress, completed);
+
+    expect(visible.groups, same(completed.groups));
+    expect(visible.total, 8);
+    expect(visible.visited, 7);
+    expect(visible.restoring, isTrue);
+    expect(visible.peopleDetectionAvailable, isTrue);
+  });
+
   test('Keep all suppresses only the selected suggestion', () {
     final controller = CleanupController();
     controller.result = fixture();
