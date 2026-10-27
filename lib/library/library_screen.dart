@@ -545,17 +545,23 @@ class _LibraryScreenState extends State<LibraryScreen>
       padding: EdgeInsets.fromLTRB(indent ? 22 : 8, 2, 8, 2),
       child: ListTile(
         dense: true,
+        visualDensity: const VisualDensity(vertical: -2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+        horizontalTitleGap: 9,
         selected: _cleanupCategory == category,
         selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         leading: Icon(category.icon, size: 20),
         title: Text(title ?? category.label, maxLines: 1,
-          overflow: TextOverflow.ellipsis),
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13)),
+        subtitle: Text(sizeSummaryLabel(summarizeSizes(
+          cleanupCategorySizeIds(_cleanup, category), _sizes)),
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 10)),
         // Category results may still be accumulating. Display the current
         // numeric count, even when zero; only the scan control animates.
-        trailing: Column(mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text((category == CleanupCategory.noPeople &&
+        trailing: Text((category == CleanupCategory.noPeople &&
                   (_cleanup.result?.peopleDetectionAvailable != true ||
                       !_cleanup.analyzingPeople)) ||
                   ((category == CleanupCategory.accidental ||
@@ -563,10 +569,6 @@ class _LibraryScreenState extends State<LibraryScreen>
                       _cleanup.result?.smartAnalyzed != true)
               ? '—' : '$count',
               style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text(sizeSummaryLabel(summarizeSizes(
-            cleanupCategorySizeIds(_cleanup, category), _sizes)),
-            style: const TextStyle(fontSize: 9)),
-        ]),
         onTap: _deleting ? null :
           () => _chooseCleanup(category, closeDrawer: closeDrawer),
       ),
