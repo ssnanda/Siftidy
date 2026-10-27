@@ -4,6 +4,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../library/photo_preview_dialog.dart';
 import 'photo_analysis.dart';
 
 /// Suggested, local photo collections. No Photos albums are created, and no
@@ -34,20 +35,28 @@ class _PropertyToursViewState extends State<PropertyToursView> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted) { return; }
+    if (!mounted) {
+      return;
+    }
     setState(() {
       for (final tour in widget.tours) {
         final id = _key(tour);
         final saved = prefs.getString('property_label_$id');
-        if (saved != null) { _labels[id] = saved; }
-        if (prefs.getBool('property_rejected_$id') == true) { _rejected.add(id); }
+        if (saved != null) {
+          _labels[id] = saved;
+        }
+        if (prefs.getBool('property_rejected_$id') == true) {
+          _rejected.add(id);
+        }
       }
     });
     for (final tour in widget.tours) {
       if (!mounted) return;
       final key = _key(tour);
-      if (!_rejected.contains(key) && !_labels.containsKey(key) &&
-          tour.latitude != null && tour.longitude != null) {
+      if (!_rejected.contains(key) &&
+          !_labels.containsKey(key) &&
+          tour.latitude != null &&
+          tour.longitude != null) {
         await _lookupAddress(tour, automatic: true);
       }
     }
@@ -82,47 +91,63 @@ class _PropertyToursViewState extends State<PropertyToursView> {
     final key = _key(tour);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('property_rejected_$key', true);
-    if (mounted) { setState(() => _rejected.add(key)); }
+    if (mounted) {
+      setState(() => _rejected.add(key));
+    }
   }
 
   Future<void> _lookupAddress(PropertyTourSuggestion tour,
       {bool automatic = false}) async {
-    if (tour.latitude == null || tour.longitude == null) { return; }
+    if (tour.latitude == null || tour.longitude == null) {
+      return;
+    }
     final key = _key(tour);
-    setState(() { _busyTour = key; _message = null; });
+    setState(() {
+      _busyTour = key;
+      _message = null;
+    });
     try {
       // Only this explicit tap contacts Apple's geocoding service.
       final address = await _geocoding.invokeMethod<String>('reverseAddress', {
         'latitude': tour.latitude!,
         'longitude': tour.longitude!,
       });
-      if (!mounted) { return; }
+      if (!mounted) {
+        return;
+      }
       if (address == null || address.trim().isEmpty) {
         setState(() => _message = 'Apple did not return a street address.');
         return;
       }
-      _editors.putIfAbsent(key, () =>
-          TextEditingController(text: _labels[key] ?? ''))
+      _editors
+          .putIfAbsent(
+              key, () => TextEditingController(text: _labels[key] ?? ''))
           .text = address;
       await _save(tour);
       if (automatic && mounted) {
         setState(() => _message = null);
       }
     } on PlatformException catch (error) {
-      if (mounted) { setState(() => _message =
-          'Address lookup failed: ${error.message ?? error.code}'); }
+      if (mounted) {
+        setState(() =>
+            _message = 'Address lookup failed: ${error.message ?? error.code}');
+      }
     } on MissingPluginException {
-      if (mounted) { setState(() => _message =
-          'Address lookup is unavailable in this build.'); }
+      if (mounted) {
+        setState(
+            () => _message = 'Address lookup is unavailable in this build.');
+      }
     } finally {
-      if (mounted) { setState(() => _busyTour = null); }
+      if (mounted) {
+        setState(() => _busyTour = null);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final visible = widget.tours.where(
-        (tour) => !_rejected.contains(_key(tour))).toList();
+    final visible =
+        widget.tours.where((tour) => !_rejected.contains(_key(tour))).toList();
     final properties = groupPropertyTours(visible, _labels);
     return ListView(padding: const EdgeInsets.all(18), children: [
       Text('Property tours', style: Theme.of(context).textTheme.headlineSmall),
@@ -133,82 +158,100 @@ class _PropertyToursViewState extends State<PropertyToursView> {
       const SizedBox(height: 8),
       const Text('GPS coordinates for detected tours are looked up with Apple. '
           'Resolved addresses and edits stay on this Mac.'),
-      if (_message != null) Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(_message!)),
-      if (visible.isEmpty) const Padding(
-        padding: EdgeInsets.all(20),
-        child: Text('No suggested property tours in this scan. '
-            'Try scanning a series of at least five home/interior photos.')),
+      if (_message != null)
+        Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(_message!)),
+      if (visible.isEmpty)
+        const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text('No suggested property tours in this scan. '
+                'Try scanning a series of at least five home/interior photos.')),
+      if (visible.isNotEmpty) const _TourTableHeader(),
       for (final property in properties)
         if (property.tours.length == 1)
-          _tourCard(context, property.tours.single)
+          _tourCard(context, property.tours.single,
+              propertyTitle: property.title)
         else
-          Card(margin: const EdgeInsets.symmetric(vertical: 8), child:
-            ExpansionTile(
-              title: Text(property.title),
-              subtitle: Text('${property.tours.length} tours · ${
-                property.tours.fold<int>(0, (n, tour) => n + tour.ids.length)} photos'),
-              childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              children: [
-                for (final tour in property.tours)
-                  _tourCard(context, tour, nested: true),
-              ],
-            )),
+          Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: ExpansionTile(
+                title: _tourTableCells(
+                  property: property.title,
+                  date: '${property.tours.length} visits',
+                  photos:
+                      '${property.tours.fold<int>(0, (n, tour) => n + tour.ids.length)}',
+                  location: 'Multiple dates',
+                  strong: true,
+                ),
+                childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                children: [
+                  for (final tour in property.tours)
+                    _tourCard(context, tour,
+                        propertyTitle: 'Tour', nested: true),
+                ],
+              )),
     ]);
   }
 
   Widget _tourCard(BuildContext context, PropertyTourSuggestion tour,
-      {bool nested = false}) {
+      {required String propertyTitle, bool nested = false}) {
     final key = _key(tour);
     final date = DateTime.fromMillisecondsSinceEpoch(tour.startedAtMs);
     final label = _labels[key];
     final coords = tour.latitude != null && tour.longitude != null
         ? '${tour.latitude!.toStringAsFixed(5)}, '
-          '${tour.longitude!.toStringAsFixed(5)}'
+            '${tour.longitude!.toStringAsFixed(5)}'
         : 'No location metadata';
-    final editor = _editors.putIfAbsent(key, () =>
-        TextEditingController(text: label ?? ''));
-    return Card(margin: const EdgeInsets.symmetric(vertical: 5), child:
-      ExpansionTile(
-        title: Text(nested
-            ? '${date.year}-${date.month.toString().padLeft(2, '0')}-'
-              '${date.day.toString().padLeft(2, '0')} · ${tour.ids.length} photos'
-            : label == null || label.isEmpty
-                ? 'Property tour · ${tour.ids.length} photos' : label),
-        subtitle: Text('${date.year}-${date.month.toString().padLeft(2, '0')}-'
-            '${date.day.toString().padLeft(2, '0')} · $coords'),
+    final editor = _editors.putIfAbsent(
+        key, () => TextEditingController(text: label ?? ''));
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      child: ExpansionTile(
+        title: _tourTableCells(
+          property: nested ? '↳ Tour' : propertyTitle,
+          date: _dateLabel(date),
+          photos: '${tour.ids.length}',
+          location: coords,
+        ),
         childrenPadding: const EdgeInsets.all(14),
         children: [
-          SizedBox(height: 105, child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              for (final id in tour.ids.take(12))
-                Padding(padding: const EdgeInsets.only(right: 8),
-                    child: _TourThumbnail(id: id)),
-              if (tour.ids.length > 12) Center(
-                  child: Text('+${tour.ids.length - 12} more')),
-            ],
-          )),
+          SizedBox(
+              height: 105,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final id in tour.ids.take(12))
+                    Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _TourThumbnail(
+                          id: id,
+                          onTap: () => _previewTour(tour, id),
+                        )),
+                  if (tour.ids.length > 12)
+                    Center(child: Text('+${tour.ids.length - 12} more')),
+                ],
+              )),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(
+            Expanded(
+                child: TextField(
               controller: editor,
               decoration: const InputDecoration(
-                labelText: 'Address or name',
-                hintText: 'Enter address or tour name',
-                border: OutlineInputBorder()),
+                  labelText: 'Address or name',
+                  hintText: 'Enter address or tour name',
+                  border: OutlineInputBorder()),
               onSubmitted: (_) => _save(tour),
             )),
             const SizedBox(width: 8),
-            TextButton(onPressed: () => _save(tour),
-              child: const Text('Save')),
+            TextButton(onPressed: () => _save(tour), child: const Text('Save')),
           ]),
           const SizedBox(height: 8),
           Wrap(spacing: 10, runSpacing: 8, children: [
             if (tour.latitude != null && tour.longitude != null)
               OutlinedButton.icon(
-                onPressed: _busyTour == null ? () => _lookupAddress(tour) : null,
+                onPressed:
+                    _busyTour == null ? () => _lookupAddress(tour) : null,
                 icon: const Icon(Icons.place_outlined),
                 label: Text(_busyTour == key
                     ? 'Looking up address…'
@@ -224,6 +267,82 @@ class _PropertyToursViewState extends State<PropertyToursView> {
       ),
     );
   }
+
+  Future<void> _previewTour(PropertyTourSuggestion tour, String id) async {
+    final assets = <AssetEntity>[];
+    for (final assetId in tour.ids) {
+      final asset = await AssetEntity.fromId(assetId);
+      if (asset != null) assets.add(asset);
+    }
+    if (!mounted || assets.isEmpty) return;
+    final index = assets.indexWhere((asset) => asset.id == id);
+    if (index < 0) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: const Color(0x99000000),
+      builder: (_) => PhotoPreviewDialog(
+        initialIndex: index,
+        items: () => assets,
+        hasMore: () => false,
+        loadMore: () async {},
+        selected: (_) => false,
+        visit: (_) {},
+        toggle: (_) {},
+        delete: (_) async => false,
+        keep: (_) async => false,
+        readOnly: true,
+      ),
+    );
+  }
+}
+
+String _dateLabel(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
+Widget _tourTableCells({
+  required String property,
+  required String date,
+  required String photos,
+  required String location,
+  bool strong = false,
+}) {
+  final style = strong ? const TextStyle(fontWeight: FontWeight.w600) : null;
+  return Row(children: [
+    Expanded(
+        flex: 5,
+        child: Text(property,
+            maxLines: 2, overflow: TextOverflow.ellipsis, style: style)),
+    const SizedBox(width: 12),
+    SizedBox(width: 112, child: Text(date, style: style)),
+    const SizedBox(width: 12),
+    SizedBox(width: 62, child: Text(photos, style: style)),
+    const SizedBox(width: 12),
+    Expanded(
+        flex: 3,
+        child: Text(location,
+            maxLines: 2, overflow: TextOverflow.ellipsis, style: style)),
+  ]);
+}
+
+class _TourTableHeader extends StatelessWidget {
+  const _TourTableHeader();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(22, 16, 58, 2),
+        child: DefaultTextStyle(
+          style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+          child: _tourTableCells(
+              property: 'Property',
+              date: 'Date',
+              photos: 'Photos',
+              location: 'Location metadata'),
+        ),
+      );
 }
 
 class PropertyTourGroup {
@@ -273,20 +392,20 @@ List<PropertyTourGroup> groupPropertyTours(
           longitude: visit.value.first.longitude,
         ),
     ]..sort((a, b) => b.startedAtMs.compareTo(a.startedAtMs));
-    result.add(PropertyTourGroup(
-      entry.key, titles[entry.key]!, consolidated));
+    result.add(PropertyTourGroup(entry.key, titles[entry.key]!, consolidated));
   }
   result.sort((a, b) {
-    final recent = b.tours.first.startedAtMs.compareTo(
-      a.tours.first.startedAtMs);
+    final recent =
+        b.tours.first.startedAtMs.compareTo(a.tours.first.startedAtMs);
     return recent != 0 ? recent : a.title.compareTo(b.title);
   });
   return result;
 }
 
 class _TourThumbnail extends StatefulWidget {
-  const _TourThumbnail({required this.id});
+  const _TourThumbnail({required this.id, required this.onTap});
   final String id;
+  final VoidCallback onTap;
   @override
   State<_TourThumbnail> createState() => _TourThumbnailState();
 }
@@ -298,18 +417,31 @@ class _TourThumbnailState extends State<_TourThumbnail> {
     super.initState();
     _asset = AssetEntity.fromId(widget.id);
   }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<AssetEntity?>(
-    future: _asset,
-    builder: (context, snapshot) => SizedBox(width: 105, height: 105,
-      child: ClipRRect(borderRadius: BorderRadius.circular(8),
-        child: snapshot.data == null
-          ? Container(color: Theme.of(context).colorScheme.surfaceContainer,
-              child: Icon(snapshot.connectionState == ConnectionState.done
-                ? Icons.broken_image_outlined : Icons.photo_outlined))
-          : AssetEntityImage(snapshot.data!, isOriginal: false,
-              thumbnailSize: const ThumbnailSize(220, 220),
-              fit: BoxFit.cover)),
-    ),
-  );
+        future: _asset,
+        builder: (context, snapshot) => SizedBox(
+          width: 105,
+          height: 105,
+          child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: snapshot.data == null
+                  ? Container(
+                      color: Theme.of(context).colorScheme.surfaceContainer,
+                      child: Icon(
+                          snapshot.connectionState == ConnectionState.done
+                              ? Icons.broken_image_outlined
+                              : Icons.photo_outlined))
+                  : Material(
+                      child: InkWell(
+                        onTap: widget.onTap,
+                        child: AssetEntityImage(snapshot.data!,
+                            isOriginal: false,
+                            thumbnailSize: const ThumbnailSize(220, 220),
+                            fit: BoxFit.cover),
+                      ),
+                    )),
+        ),
+      );
 }

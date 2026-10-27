@@ -123,6 +123,11 @@ bridge = r'''
                 candidate.0.contains(day)
               }
             }
+            // A status-bar time and a date word also occur in Messages,
+            // Calendar, email and many web pages. Only suggest a lock screen
+            // when OCR sees the sparse text layout typical of one.
+            let recognizedWordCount = text.split(whereSeparator: { $0.isWhitespace }).count
+            let sparseLockScreen = clock && weekday && recognizedWordCount <= 16
             let reason: String?
             if alarm {
               reason = "Possible alarm capture"
@@ -130,7 +135,7 @@ bridge = r'''
               reason = "Possible email capture"
             } else if message {
               reason = "Possible message capture"
-            } else if clock && weekday {
+            } else if sparseLockScreen {
               reason = "Possible lock-screen capture"
             } else {
               reason = nil

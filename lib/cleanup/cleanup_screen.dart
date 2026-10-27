@@ -11,28 +11,36 @@ import 'duplicate_selection.dart';
 import 'media_sizes.dart';
 import 'scan_history_view.dart';
 
-enum CleanupCategory { exact, similar, blurry, noPeople, accidental, propertyTours }
+enum CleanupCategory {
+  exact,
+  similar,
+  blurry,
+  noPeople,
+  accidental,
+  propertyTours
+}
 
 List<String> cleanupCategorySizeIds(
-    CleanupController controller, CleanupCategory category) => switch (category) {
-  CleanupCategory.exact => [
-    for (final group in controller.exact) ...group.skip(1),
-  ],
-  CleanupCategory.similar => [
-    for (final group in controller.similar) ...group.skip(1),
-  ],
-  CleanupCategory.blurry => controller.blurry,
-  CleanupCategory.noPeople => controller.noPeople,
-  CleanupCategory.accidental => controller.accidentalScreenshots,
-  CleanupCategory.propertyTours => [
-    for (final tour in controller.propertyTours) ...tour.ids,
-  ],
-};
+        CleanupController controller, CleanupCategory category) =>
+    switch (category) {
+      CleanupCategory.exact => [
+          for (final group in controller.exact) ...group.skip(1),
+        ],
+      CleanupCategory.similar => [
+          for (final group in controller.similar) ...group.skip(1),
+        ],
+      CleanupCategory.blurry => controller.blurry,
+      CleanupCategory.noPeople => controller.noPeople,
+      CleanupCategory.accidental => controller.accidentalScreenshots,
+      CleanupCategory.propertyTours => [
+          for (final tour in controller.propertyTours) ...tour.ids,
+        ],
+    };
 
 Set<String> allCleanupSuggestionIds(CleanupController controller) => {
-  for (final category in CleanupCategory.values)
-    ...cleanupCategorySizeIds(controller, category),
-};
+      for (final category in CleanupCategory.values)
+        ...cleanupCategorySizeIds(controller, category),
+    };
 
 extension CleanupCategoryLabel on CleanupCategory {
   String get label => switch (this) {
@@ -85,7 +93,8 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   bool _busy = false;
   String? _message;
 
-  bool get _groupMode => widget.category == CleanupCategory.exact ||
+  bool get _groupMode =>
+      widget.category == CleanupCategory.exact ||
       widget.category == CleanupCategory.similar;
 
   @override
@@ -129,11 +138,11 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         CleanupCategory.blurry => _chunk(widget.controller.blurry),
         CleanupCategory.noPeople => _chunk(widget.controller.noPeople),
         CleanupCategory.accidental => _chunk([
-          for (final id in widget.controller.accidentalScreenshots)
-            if (_screenshotFilters.contains(screenshotKindForReason(
-                widget.controller.result?.groups.accidentalReasons[id])))
-              id,
-        ]),
+            for (final id in widget.controller.accidentalScreenshots)
+              if (_screenshotFilters.contains(screenshotKindForReason(
+                  widget.controller.result?.groups.accidentalReasons[id])))
+                id,
+          ]),
         CleanupCategory.propertyTours => const <List<String>>[],
       };
 
@@ -154,15 +163,14 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
 
   String _bestKeeper(List<String> group) {
     final assets = widget.controller.result!.photos;
-    final sorted = [...group]
-      ..sort((a, b) {
+    final sorted = [...group]..sort((a, b) {
         final x = assets[a]!;
         final y = assets[b]!;
         if (x.isFavorite != y.isFavorite) {
           return x.isFavorite ? -1 : 1;
         }
-        final dimensionDifference = (y.width * y.height)
-            .compareTo(x.width * x.height);
+        final dimensionDifference =
+            (y.width * y.height).compareTo(x.width * x.height);
         return dimensionDifference != 0
             ? dimensionDifference
             : y.createDateTime.compareTo(x.createDateTime);
@@ -224,12 +232,13 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   void _keepEntireGroup(List<String> group) {
     if (_busy) return;
     widget.controller.dismissGroup(group,
-      similar: widget.category == CleanupCategory.similar);
+        similar: widget.category == CleanupCategory.similar);
     setState(() {
       _selectedGroups.remove(_key(group));
       _keeperChoices.remove(_key(group));
       _expanded = null;
-      _message = 'All ${group.length} photos kept; this suggestion was dismissed.';
+      _message =
+          'All ${group.length} photos kept; this suggestion was dismissed.';
     });
   }
 
@@ -305,18 +314,24 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
       final removed = await _repository.delete(
         safeRequested.toList(),
         knownSizes: _sizes.knownFor(safeRequested),
+        source: widget.category.label,
+        assets: [
+          for (final id in safeRequested)
+            if (widget.controller.result?.photos[id]
+                case final AssetEntity asset)
+              asset,
+        ],
       );
       if (!mounted) return false;
       widget.controller.exclude(removed);
       setState(() {
-        _selectedGroups.removeWhere((key) =>
-            !_groups.any((group) => _key(group) == key));
+        _selectedGroups
+            .removeWhere((key) => !_groups.any((group) => _key(group) == key));
         _selectedPhotos.removeAll(removed);
         _message = removed.isEmpty
             ? 'Nothing was deleted.'
             : protected > 0
-                ? 'Deleted ${removed.length}; kept $protected duplicate ${
-                    protected == 1 ? "keeper" : "keepers"}.'
+                ? 'Deleted ${removed.length}; kept $protected duplicate ${protected == 1 ? "keeper" : "keepers"}.'
                 : null;
       });
       if (removed.isNotEmpty) widget.onLibraryChanged();
@@ -375,8 +390,8 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         hasMore: () => false,
         loadMore: () async {},
         selected: (id) => _groupMode
-            ? _groups.any((group) => group.contains(id) &&
-                _selectedGroups.contains(_key(group)))
+            ? _groups.any((group) =>
+                group.contains(id) && _selectedGroups.contains(_key(group)))
             : _selectedPhotos.contains(id),
         visit: (_) {},
         toggle: (asset) {
@@ -417,307 +432,367 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
     }
     final result = controller.result;
     final groups = _groups;
-    final selectedCount = _groupMode
-        ? _selectedSets.length
-        : _currentlySelectedPhotoIds.length;
+    final selectedCount =
+        _groupMode ? _selectedSets.length : _currentlySelectedPhotoIds.length;
     final allCount = _groupMode ? groups.length : _visible.length;
-    final selectedIds = _groupMode ? _plannedExtras : _currentlySelectedPhotoIds;
+    final selectedIds =
+        _groupMode ? _plannedExtras : _currentlySelectedPhotoIds;
     final deletableIds = _safeDeletionCandidates(selectedIds);
     final protectedCount = selectedIds.length - deletableIds.length;
     final canDelete = selectedCount > 0 && !_busy && deletableIds.isNotEmpty;
 
     return Column(children: [
-      Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.category.label,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              )),
-          const SizedBox(height: 5),
-          Text(_groupMode
-              ? 'One tile = one set. Select sets, then keep one photo from each and delete the extras.'
-              : 'Select the photos you want to review or delete. No automatic removal.',
-            style: const TextStyle(fontSize: 12)),
-          if (widget.category == CleanupCategory.accidental &&
-              widget.controller.accidentalScreenshots.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 6, children: [
-              TextButton(
-                onPressed: _screenshotFilters.length ==
-                        ScreenshotSuggestionKind.values.length
-                    ? null : () => setState(() {
-                        _screenshotFilters
-                          ..clear()
-                          ..addAll(ScreenshotSuggestionKind.values);
-                        _selectedPhotos.clear();
-                      }),
-                child: const Text('Select all'),
-              ),
-              TextButton(
-                onPressed: _screenshotFilters.isEmpty ? null : () => setState(() {
-                  _screenshotFilters.clear();
-                  _selectedPhotos.clear();
-                }),
-                child: const Text('Select none'),
-              ),
-              for (final kind in ScreenshotSuggestionKind.values)
-                if (widget.controller.accidentalScreenshots.where(
-                    (id) => screenshotKindForReason(widget.controller
-                        .result?.groups.accidentalReasons[id]) == kind)
-                    .isNotEmpty)
-                  FilterChip(
-                    label: Text('${kind.label} · ${widget.controller
-                        .accidentalScreenshots.where((id) =>
-                            screenshotKindForReason(widget.controller.result
-                                ?.groups.accidentalReasons[id]) == kind)
-                        .length}'),
-                    selected: _screenshotFilters.contains(kind),
-                    onSelected: (selected) => setState(() {
-                      if (selected) {
-                        _screenshotFilters.add(kind);
-                      } else {
-                        _screenshotFilters.remove(kind);
-                      }
-                      _selectedPhotos.clear();
-                    }),
-                  ),
-            ]),
-          ],
-          const SizedBox(height: 10),
-          Wrap(spacing: 12, runSpacing: 7,
-            crossAxisAlignment: WrapCrossAlignment.center, children: [
-              OutlinedButton.icon(
-                onPressed: controller.running || _busy ? null : () => controller.start(
-                  scopeYear: controller.year, people: controller.analyzingPeople,
-                ),
-                icon: const Icon(Icons.radar_outlined),
-                label: Text(controller.running ? 'Scanning…' : 'Scan / Rescan'),
-              ),
-              DropdownButton<ScanMode>(
-                value: controller.performance.activeMode,
-                underline: const SizedBox.shrink(),
-                items: [
-                  for (final mode in ScanMode.values)
-                    DropdownMenuItem(
-                      value: mode,
-                      child: Text(mode == ScanMode.turbo
-                          ? 'Turbo (temporary)' : mode.title),
-                    ),
-                ],
-                onChanged: (mode) {
-                  if (mode == null) return;
-                  controller.performance.setBaseMode(mode);
-                },
-              ),
-              PopupMenuButton<int>(
-                tooltip: 'Run Turbo for a chosen duration',
-                onSelected: (minutes) => controller.performance.activateTurbo(
-                  Duration(minutes: minutes),
-                ),
-                itemBuilder: (_) => [
-                  for (final minutes in [30, 60, 120])
-                    PopupMenuItem(value: minutes,
-                      child: Text('Turbo · $minutes minutes')),
-                ],
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.bolt_outlined, size: 18),
-                    SizedBox(width: 3),
-                    Text('Turbo'),
-                    Icon(Icons.arrow_drop_down, size: 18),
-                  ]),
-                ),
-              ),
-              FilterChip(
-                label: const Text('Turbo when idle (AC)'),
-                selected: controller.performance.autoTurboOnIdle,
-                onSelected: controller.performance.setAutoTurboOnIdle,
-              ),
-              if (controller.running) ...[
-                OutlinedButton.icon(
-                  onPressed: controller.pauseOrResume,
-                  icon: Icon(controller.paused ? Icons.play_arrow : Icons.pause),
-                  label: Text(controller.paused ? 'Resume' : 'Pause'),
-                ),
-                TextButton(onPressed: controller.stop, child: const Text('Stop')),
-              ],
-              TextButton.icon(
-                onPressed: controller.openHistory,
-                icon: const Icon(Icons.history),
-                label: const Text('History & storage'),
-              ),
-              if (controller.running || controller.result != null ||
-                  controller.error != null)
-                TextButton.icon(
-                  onPressed: _busy ? null : _discardScan,
-                  icon: const Icon(Icons.layers_clear_outlined),
-                  label: const Text('Discard scan results'),
-                ),
-              DropdownButton<int?>(
-                value: controller.year,
-                underline: const SizedBox.shrink(),
-                hint: const Text('All years'),
-                items: [
-                  const DropdownMenuItem<int?>(value: null, child: Text('All years')),
-                  for (final year in {
-                    ...?result?.years,
-                    ...List<int>.generate(12, (i) => DateTime.now().year - i),
-                  }.toList()..sort((a, b) => b.compareTo(a)))
-                    DropdownMenuItem<int?>(value: year, child: Text('$year')),
-                ],
-                onChanged: controller.running || _busy ? null : (year) =>
-                    controller.start(scopeYear: year,
-                      people: controller.analyzingPeople),
-              ),
-              FilterChip(
-                label: const Text('Analyze people (slower)'),
-                selected: controller.analyzingPeople,
-                onSelected: controller.running || _busy ? null : (enabled) =>
-                    controller.start(scopeYear: controller.year, people: enabled),
-              ),
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                Checkbox(value: controller.autoScan,
-                  onChanged: (enabled) => controller.setAutoScan(enabled ?? false)),
-                const Text('Auto scan on launch'),
-              ]),
-            ],
-          ),
-          if (controller.running || controller.paused) ...[
-            const SizedBox(height: 7),
-            LinearProgressIndicator(value: controller.total == 0
-                ? null : controller.fraction),
-          ],
-          Padding(padding: const EdgeInsets.only(top: 5), child: Text(
-            controller.running
-                ? '${controller.paused ? "PAUSED" : "RUNNING"} · '
-                  '${controller.performance.activeMode.title} · '
-                  '${controller.visited} / ${controller.total} · '
-                  '${controller.paused ? "Scan paused" : _etaLabel(controller.eta)} '
-                  '· ${controller.analyzedCount} analyzed'
-                : controller.completed
-                    ? 'Scan complete · ${controller.analyzedCount} analyzed '
-                      '· ${result?.skipped ?? 0} unavailable'
-                    : controller.visited > 0
-                        ? 'Saved checkpoint: ${controller.visited} / '
-                          '${controller.total} photos · available to resume'
-                        : 'Scan stopped or not started.',
-            style: const TextStyle(fontSize: 12),
-          )),
-          if (controller.running)
-            Text(controller.paused
-                ? 'Paused · safe to resume, stop, or quit'
-                : 'Working: ${controller.scanPhase}',
-              style: const TextStyle(fontSize: 12)),
-          if (controller.resumeStatus != null)
-            Text(controller.resumeStatus!,
-              style: TextStyle(fontSize: 12,
-                color: Theme.of(context).colorScheme.primary)),
-          if (controller.error != null)
-            Text(controller.error!, style: const TextStyle(color: Colors.red)),
-          if (_message != null)
-            Text(_message!, style: TextStyle(color:
-              _message!.contains('failed') || _message!.contains('Unable')
-                  ? Colors.red
-                  : Theme.of(context).colorScheme.primary)),
-          if (widget.category == CleanupCategory.accidental &&
-              result?.smartAnalyzed != true)
-            const Text('These suggestions require a new v0.3 smart scan. '
-              'Older scan results did not analyze accidental screenshots.',
-              style: TextStyle(fontSize: 12)),
-          if (widget.category == CleanupCategory.noPeople &&
-              (!controller.analyzingPeople ||
-                  result?.peopleDetectionAvailable != true))
-            const Text('Scenes & objects were not analyzed in this scan. '
-              'Enable people/scene analysis in Scan settings and rescan. '
-              'A zero count does not mean every photo contains people.',
-              style: TextStyle(fontSize: 12)),
-          if (allCount > 0) ...[
-            const SizedBox(height: 5),
-            Row(children: [
-              Checkbox(value: selectedCount == allCount,
-                onChanged: _busy ? null : (value) => _selectAll(value ?? false)),
-              Text(_groupMode
-                  ? 'Select all $allCount sets'
-                  : 'Select all $allCount photos'),
-              const SizedBox(width: 12),
-              if (selectedCount > 0)
-                TextButton(onPressed: _busy ? null : () => _selectAll(false),
-                  child: const Text('Clear selection')),
-            ]),
-          ],
-        ],
-      )),
-      const Divider(height: 1),
-      Expanded(child: result == null
-        ? Center(child: Text(controller.running
-            ? 'Finding matches in the background…' : 'Start scanning to find photos.'))
-        : groups.isEmpty
-            ? Center(child: Text(
-                widget.category == CleanupCategory.accidental &&
-                        _screenshotFilters.isEmpty
-                    ? 'Select one or more screenshot tags above.'
-                    : controller.running
-                        ? 'No matches yet. New results will appear as scanning continues.'
-                        : 'No ${widget.category.label.toLowerCase()} in this scan.'))
-            : Column(children: [
-              if (_groupMode && _expanded != null)
-                _expandedReview(groups),
-              Expanded(child: LayoutBuilder(builder: (context, constraints) {
-                final columns = (constraints.maxWidth / 210).floor().clamp(1, 9).toInt();
-                return GridView.builder(
-                  padding: const EdgeInsets.all(14),
-                  itemCount: _groupMode ? groups.length : _visible.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: _groupMode ? 0.91 : 1.0,
-                  ),
-                  itemBuilder: (context, index) => _groupMode
-                      ? _groupCard(groups[index])
-                      : _photoCard(_visible[index]),
-                );
-              })),
-            ])),
-      if (selectedCount > 0)
-        SafeArea(top: false, child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
-          child: Wrap(spacing: 12, runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+      Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_groupMode ? '$selectedCount sets selected'
-                  : '$selectedCount photos selected',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text(sizeSummaryLabel(summarizeSizes(selectedIds, _sizes)),
-                style: const TextStyle(fontSize: 12)),
-              if (protectedCount > 0)
-                Text('$protectedCount duplicate ${protectedCount == 1
-                    ? "keeper" : "keepers"} protected',
+              Text(widget.category.label,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      )),
+              const SizedBox(height: 5),
+              Text(
+                  _groupMode
+                      ? 'One tile = one set. Select sets, then keep one photo from each and delete the extras.'
+                      : 'Select the photos you want to review or delete. No automatic removal.',
                   style: const TextStyle(fontSize: 12)),
-              if (!_groupMode)
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : () async {
-                    await _keepIds([
-                      for (final asset in _visible)
-                        if (_selectedPhotos.contains(asset.id)) asset,
-                    ]);
-                  },
-                  icon: const Icon(Icons.bookmark_add_outlined),
-                  label: const Text('Keep in Keepers'),
-                ),
-              FilledButton.icon(
-                onPressed: canDelete ? _deleteSelected : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFB42333)),
-                icon: const Icon(Icons.delete_outline),
-                label: Text(_groupMode
-                    ? 'Keep $selectedCount · Delete ${deletableIds.length} extras'
-                    : 'Delete ${deletableIds.length} selected'),
+              if (widget.category == CleanupCategory.accidental &&
+                  widget.controller.accidentalScreenshots.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(spacing: 8, runSpacing: 6, children: [
+                  TextButton(
+                    onPressed: _screenshotFilters.length ==
+                            ScreenshotSuggestionKind.values.length
+                        ? null
+                        : () => setState(() {
+                              _screenshotFilters
+                                ..clear()
+                                ..addAll(ScreenshotSuggestionKind.values);
+                              _selectedPhotos.clear();
+                            }),
+                    child: const Text('Select all'),
+                  ),
+                  TextButton(
+                    onPressed: _screenshotFilters.isEmpty
+                        ? null
+                        : () => setState(() {
+                              _screenshotFilters.clear();
+                              _selectedPhotos.clear();
+                            }),
+                    child: const Text('Select none'),
+                  ),
+                  for (final kind in ScreenshotSuggestionKind.values)
+                    if (widget.controller.accidentalScreenshots
+                        .where((id) =>
+                            screenshotKindForReason(widget.controller.result
+                                ?.groups.accidentalReasons[id]) ==
+                            kind)
+                        .isNotEmpty)
+                      FilterChip(
+                        label: Text(
+                            '${kind.label} · ${widget.controller.accidentalScreenshots.where((id) => screenshotKindForReason(widget.controller.result?.groups.accidentalReasons[id]) == kind).length}'),
+                        selected: _screenshotFilters.contains(kind),
+                        onSelected: (selected) => setState(() {
+                          if (selected) {
+                            _screenshotFilters.add(kind);
+                          } else {
+                            _screenshotFilters.remove(kind);
+                          }
+                          _selectedPhotos.clear();
+                        }),
+                      ),
+                ]),
+              ],
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 7,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: controller.running || _busy
+                        ? null
+                        : () => controller.start(
+                              scopeYear: controller.year,
+                              people: controller.analyzingPeople,
+                            ),
+                    icon: const Icon(Icons.radar_outlined),
+                    label: Text(
+                        controller.running ? 'Scanning…' : 'Scan / Rescan'),
+                  ),
+                  DropdownButton<ScanMode>(
+                    value: controller.performance.activeMode,
+                    underline: const SizedBox.shrink(),
+                    items: [
+                      for (final mode in ScanMode.values)
+                        DropdownMenuItem(
+                          value: mode,
+                          child: Text(mode == ScanMode.turbo
+                              ? 'Turbo (temporary)'
+                              : mode.title),
+                        ),
+                    ],
+                    onChanged: (mode) {
+                      if (mode == null) return;
+                      controller.performance.setBaseMode(mode);
+                    },
+                  ),
+                  PopupMenuButton<int>(
+                    tooltip: 'Run Turbo for a chosen duration',
+                    onSelected: (minutes) =>
+                        controller.performance.activateTurbo(
+                      Duration(minutes: minutes),
+                    ),
+                    itemBuilder: (_) => [
+                      for (final minutes in [30, 60, 120])
+                        PopupMenuItem(
+                            value: minutes,
+                            child: Text('Turbo · $minutes minutes')),
+                    ],
+                    child: const Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.bolt_outlined, size: 18),
+                        SizedBox(width: 3),
+                        Text('Turbo'),
+                        Icon(Icons.arrow_drop_down, size: 18),
+                      ]),
+                    ),
+                  ),
+                  FilterChip(
+                    label: const Text('Turbo when idle (AC)'),
+                    selected: controller.performance.autoTurboOnIdle,
+                    onSelected: controller.performance.setAutoTurboOnIdle,
+                  ),
+                  if (controller.running) ...[
+                    OutlinedButton.icon(
+                      onPressed: controller.pauseOrResume,
+                      icon: Icon(
+                          controller.paused ? Icons.play_arrow : Icons.pause),
+                      label: Text(controller.paused ? 'Resume' : 'Pause'),
+                    ),
+                    TextButton(
+                        onPressed: controller.stop, child: const Text('Stop')),
+                  ],
+                  TextButton.icon(
+                    onPressed: controller.openHistory,
+                    icon: const Icon(Icons.history),
+                    label: const Text('History & storage'),
+                  ),
+                  if (controller.running ||
+                      controller.result != null ||
+                      controller.error != null)
+                    TextButton.icon(
+                      onPressed: _busy ? null : _discardScan,
+                      icon: const Icon(Icons.layers_clear_outlined),
+                      label: const Text('Discard scan results'),
+                    ),
+                  DropdownButton<int?>(
+                    value: controller.year,
+                    underline: const SizedBox.shrink(),
+                    hint: const Text('All years'),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('All years')),
+                      for (final year in {
+                        ...?result?.years,
+                        ...List<int>.generate(
+                            12, (i) => DateTime.now().year - i),
+                      }.toList()
+                        ..sort((a, b) => b.compareTo(a)))
+                        DropdownMenuItem<int?>(
+                            value: year, child: Text('$year')),
+                    ],
+                    onChanged: controller.running || _busy
+                        ? null
+                        : (year) => controller.start(
+                            scopeYear: year,
+                            people: controller.analyzingPeople),
+                  ),
+                  FilterChip(
+                    label: const Text('Analyze people (slower)'),
+                    selected: controller.analyzingPeople,
+                    onSelected: controller.running || _busy
+                        ? null
+                        : (enabled) => controller.start(
+                            scopeYear: controller.year, people: enabled),
+                  ),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Checkbox(
+                        value: controller.autoScan,
+                        onChanged: (enabled) =>
+                            controller.setAutoScan(enabled ?? false)),
+                    const Text('Auto scan on launch'),
+                  ]),
+                ],
               ),
+              if (controller.running || controller.paused) ...[
+                const SizedBox(height: 7),
+                LinearProgressIndicator(
+                    value: controller.total == 0 ? null : controller.fraction),
+              ],
+              Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    controller.running
+                        ? '${controller.paused ? "PAUSED" : "RUNNING"} · '
+                            '${controller.performance.activeMode.title} · '
+                            '${controller.visited} / ${controller.total} · '
+                            '${controller.paused ? "Scan paused" : _etaLabel(controller.eta)} '
+                            '· ${controller.analyzedCount} analyzed'
+                        : controller.completed
+                            ? 'Scan complete · ${controller.analyzedCount} analyzed '
+                                '· ${result?.skipped ?? 0} unavailable'
+                            : controller.visited > 0
+                                ? 'Saved checkpoint: ${controller.visited} / '
+                                    '${controller.total} photos · available to resume'
+                                : 'Scan stopped or not started.',
+                    style: const TextStyle(fontSize: 12),
+                  )),
+              if (controller.running)
+                Text(
+                    controller.paused
+                        ? 'Paused · safe to resume, stop, or quit'
+                        : 'Working: ${controller.scanPhase}',
+                    style: const TextStyle(fontSize: 12)),
+              if (controller.resumeStatus != null)
+                Text(controller.resumeStatus!,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary)),
+              if (controller.error != null)
+                Text(controller.error!,
+                    style: const TextStyle(color: Colors.red)),
+              if (_message != null)
+                Text(_message!,
+                    style: TextStyle(
+                        color: _message!.contains('failed') ||
+                                _message!.contains('Unable')
+                            ? Colors.red
+                            : Theme.of(context).colorScheme.primary)),
+              if (widget.category == CleanupCategory.accidental &&
+                  result?.smartAnalyzed != true)
+                const Text(
+                    'These suggestions require a new v0.3 smart scan. '
+                    'Older scan results did not analyze accidental screenshots.',
+                    style: TextStyle(fontSize: 12)),
+              if (widget.category == CleanupCategory.noPeople &&
+                  (!controller.analyzingPeople ||
+                      result?.peopleDetectionAvailable != true))
+                const Text(
+                    'Scenes & objects were not analyzed in this scan. '
+                    'Enable people/scene analysis in Scan settings and rescan. '
+                    'A zero count does not mean every photo contains people.',
+                    style: TextStyle(fontSize: 12)),
+              if (allCount > 0) ...[
+                const SizedBox(height: 5),
+                Row(children: [
+                  Checkbox(
+                      value: selectedCount == allCount,
+                      onChanged:
+                          _busy ? null : (value) => _selectAll(value ?? false)),
+                  Text(_groupMode
+                      ? 'Select all $allCount sets'
+                      : 'Select all $allCount photos'),
+                  const SizedBox(width: 12),
+                  if (selectedCount > 0)
+                    TextButton(
+                        onPressed: _busy ? null : () => _selectAll(false),
+                        child: const Text('Clear selection')),
+                ]),
+              ],
             ],
-          ),
-        )),
+          )),
+      const Divider(height: 1),
+      Expanded(
+          child: result == null
+              ? Center(
+                  child: Text(controller.running
+                      ? 'Finding matches in the background…'
+                      : 'Start scanning to find photos.'))
+              : groups.isEmpty
+                  ? Center(
+                      child: Text(widget.category ==
+                                  CleanupCategory.accidental &&
+                              _screenshotFilters.isEmpty
+                          ? 'Select one or more screenshot tags above.'
+                          : controller.running
+                              ? 'No matches yet. New results will appear as scanning continues.'
+                              : 'No ${widget.category.label.toLowerCase()} in this scan.'))
+                  : Column(children: [
+                      if (_groupMode && _expanded != null)
+                        _expandedReview(groups),
+                      Expanded(
+                          child: LayoutBuilder(builder: (context, constraints) {
+                        final columns = (constraints.maxWidth / 210)
+                            .floor()
+                            .clamp(1, 9)
+                            .toInt();
+                        return GridView.builder(
+                          padding: const EdgeInsets.all(14),
+                          itemCount:
+                              _groupMode ? groups.length : _visible.length,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: columns,
+                            mainAxisSpacing: 14,
+                            crossAxisSpacing: 14,
+                            childAspectRatio: _groupMode ? 0.91 : 1.0,
+                          ),
+                          itemBuilder: (context, index) => _groupMode
+                              ? _groupCard(groups[index])
+                              : _photoCard(_visible[index]),
+                        );
+                      })),
+                    ])),
+      if (selectedCount > 0)
+        SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                      _groupMode
+                          ? '$selectedCount sets selected'
+                          : '$selectedCount photos selected',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(sizeSummaryLabel(summarizeSizes(selectedIds, _sizes)),
+                      style: const TextStyle(fontSize: 12)),
+                  if (protectedCount > 0)
+                    Text(
+                        '$protectedCount duplicate ${protectedCount == 1 ? "keeper" : "keepers"} protected',
+                        style: const TextStyle(fontSize: 12)),
+                  if (!_groupMode)
+                    OutlinedButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              await _keepIds([
+                                for (final asset in _visible)
+                                  if (_selectedPhotos.contains(asset.id)) asset,
+                              ]);
+                            },
+                      icon: const Icon(Icons.bookmark_add_outlined),
+                      label: const Text('Keep in Keepers'),
+                    ),
+                  FilledButton.icon(
+                    onPressed: canDelete ? _deleteSelected : null,
+                    style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFB42333)),
+                    icon: const Icon(Icons.delete_outline),
+                    label: Text(_groupMode
+                        ? 'Keep $selectedCount · Delete ${deletableIds.length} extras'
+                        : 'Delete ${deletableIds.length} selected'),
+                  ),
+                ],
+              ),
+            )),
     ]);
   }
 
@@ -727,41 +802,66 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
     final representative = widget.controller.result?.photos[_keeper(group)];
     if (representative == null) return const SizedBox.shrink();
     return Column(children: [
-      Expanded(child: InkWell(
+      Expanded(
+          child: InkWell(
         onTap: () => _toggleGroup(group),
         onDoubleTap: () => _preview(representative),
-        child: ClipRRect(borderRadius: BorderRadius.circular(9), child: Stack(
-          fit: StackFit.expand, children: [
-            AssetEntityImage(representative, isOriginal: false,
-              thumbnailSize: const ThumbnailSize(400, 400), fit: BoxFit.cover),
-            if (selected)
-              DecoratedBox(decoration: BoxDecoration(border: Border.all(
-                color: const Color(0xFF007982), width: 4))),
-            Positioned(top: 7, left: 7, child: DecoratedBox(
-              decoration: BoxDecoration(color: const Color(0xE7003035),
-                borderRadius: BorderRadius.circular(6)),
-              child: Padding(padding: const EdgeInsets.symmetric(
-                horizontal: 9, vertical: 5), child: Text('×${group.length}',
-                style: const TextStyle(color: Colors.white,
-                  fontWeight: FontWeight.bold))),
+        child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                AssetEntityImage(representative,
+                    isOriginal: false,
+                    thumbnailSize: const ThumbnailSize(400, 400),
+                    fit: BoxFit.cover),
+                if (selected)
+                  DecoratedBox(
+                      decoration: BoxDecoration(
+                          border: Border.all(
+                              color: const Color(0xFF007982), width: 4))),
+                Positioned(
+                    top: 7,
+                    left: 7,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                          color: const Color(0xE7003035),
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 5),
+                          child: Text('×${group.length}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold))),
+                    )),
+                Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Icon(
+                        selected ? Icons.check_circle : Icons.circle_outlined,
+                        color:
+                            selected ? const Color(0xFF76FFE0) : Colors.white,
+                        shadows: const [
+                          Shadow(color: Colors.black87, blurRadius: 6)
+                        ])),
+                if (representative.isFavorite)
+                  const Positioned(
+                      left: 7,
+                      bottom: 7,
+                      child: Icon(Icons.favorite, color: Color(0xFFE94E70))),
+              ],
             )),
-            Positioned(top: 5, right: 5, child: Icon(selected
-                ? Icons.check_circle : Icons.circle_outlined,
-              color: selected ? const Color(0xFF76FFE0) : Colors.white,
-              shadows: const [Shadow(color: Colors.black87, blurRadius: 6)])),
-            if (representative.isFavorite)
-              const Positioned(left: 7, bottom: 7, child: Icon(
-                Icons.favorite, color: Color(0xFFE94E70))),
-          ],
-        )),
       )),
-      SizedBox(height: 35, child: TextButton.icon(
-        onPressed: () => setState(() =>
-            _expanded = _expanded == key ? null : key),
-        icon: Icon(_expanded == key ? Icons.expand_less : Icons.expand_more,
-          size: 18),
-        label: const Text('Review copies'),
-      )),
+      SizedBox(
+          height: 35,
+          child: TextButton.icon(
+            onPressed: () =>
+                setState(() => _expanded = _expanded == key ? null : key),
+            icon: Icon(_expanded == key ? Icons.expand_less : Icons.expand_more,
+                size: 18),
+            label: const Text('Review copies'),
+          )),
     ]);
   }
 
@@ -776,10 +876,12 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
       height: 245,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(
-            'Review ${group.length} copies · choose which to keep',
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600))),
+          Expanded(
+              child: Text(
+                  'Review ${group.length} copies · choose which to keep',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600))),
           TextButton.icon(
             onPressed: _busy ? null : () => _keepEntireGroup(group),
             icon: const Icon(Icons.done_all, size: 18),
@@ -790,39 +892,55 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
               onPressed: _busy ? null : () => _keepEntireGroup(group),
               child: const Text('Not similar'),
             ),
-          IconButton(tooltip: 'Close review', icon: const Icon(Icons.close),
-            onPressed: () => setState(() => _expanded = null)),
+          IconButton(
+              tooltip: 'Close review',
+              icon: const Icon(Icons.close),
+              onPressed: () => setState(() => _expanded = null)),
         ]),
-        Expanded(child: ListView(scrollDirection: Axis.horizontal, children: [
+        Expanded(
+            child: ListView(scrollDirection: Axis.horizontal, children: [
           for (final id in group)
             if (widget.controller.result?.photos[id]
                 case final AssetEntity photo)
-              SizedBox(width: 156, child: Padding(
-                padding: const EdgeInsets.only(right: 9),
-                child: Column(children: [
-                  Expanded(child: InkWell(
-                    onTap: () => _chooseKeeper(group, photo.id),
-                    onDoubleTap: () => _preview(photo),
-                    child: ClipRRect(borderRadius: BorderRadius.circular(8),
-                      child: Stack(fit: StackFit.expand, children: [
-                        AssetEntityImage(photo, isOriginal: false,
-                          thumbnailSize: const ThumbnailSize(300, 300),
-                          fit: BoxFit.cover),
-                        if (chosen == photo.id)
-                          DecoratedBox(decoration: BoxDecoration(
-                            border: Border.all(
-                              color: const Color(0xFF007982), width: 4))),
-                      ])),
+              SizedBox(
+                  width: 156,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 9),
+                    child: Column(children: [
+                      Expanded(
+                          child: InkWell(
+                        onTap: () => _chooseKeeper(group, photo.id),
+                        onDoubleTap: () => _preview(photo),
+                        child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Stack(fit: StackFit.expand, children: [
+                              AssetEntityImage(photo,
+                                  isOriginal: false,
+                                  thumbnailSize: const ThumbnailSize(300, 300),
+                                  fit: BoxFit.cover),
+                              if (chosen == photo.id)
+                                DecoratedBox(
+                                    decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: const Color(0xFF007982),
+                                            width: 4))),
+                            ])),
+                      )),
+                      SizedBox(
+                          height: 34,
+                          child: TextButton.icon(
+                            onPressed: () => _chooseKeeper(group, photo.id),
+                            icon: Icon(
+                                chosen == photo.id
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                size: 17),
+                            label: Text(chosen == photo.id
+                                ? 'Keep this'
+                                : 'Keep instead'),
+                          )),
+                    ]),
                   )),
-                  SizedBox(height: 34, child: TextButton.icon(
-                    onPressed: () => _chooseKeeper(group, photo.id),
-                    icon: Icon(chosen == photo.id
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked, size: 17),
-                    label: Text(chosen == photo.id ? 'Keep this' : 'Keep instead'),
-                  )),
-                ]),
-              )),
         ])),
       ]),
     );
@@ -833,41 +951,59 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
     return InkWell(
       onTap: () => _togglePhoto(photo),
       onDoubleTap: () => _preview(photo),
-      child: ClipRRect(borderRadius: BorderRadius.circular(8),
-        child: Stack(fit: StackFit.expand, children: [
-          AssetEntityImage(photo, isOriginal: false,
-            thumbnailSize: const ThumbnailSize(400, 400), fit: BoxFit.cover),
-          if (selected)
-            DecoratedBox(decoration: BoxDecoration(border: Border.all(
-              color: const Color(0xFF007982), width: 4))),
-          Positioned(top: 5, right: 5, child: Icon(
-            selected ? Icons.check_circle : Icons.circle_outlined,
-            color: selected ? const Color(0xFF76FFE0) : Colors.white,
-            shadows: const [Shadow(blurRadius: 6, color: Colors.black87)],
-          )),
-          if (photo.isFavorite)
-            const Positioned(bottom: 5, left: 5,
-              child: Icon(Icons.favorite, color: Color(0xFFE94E70))),
-          if (widget.category == CleanupCategory.accidental)
-            Positioned(bottom: 0, left: 0, right: 0,
-              child: Container(color: Colors.black87,
-                padding: const EdgeInsets.symmetric(horizontal: 7),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(widget.controller.result?.groups
-                          .accidentalReasons[photo.id] ?? 'Review suggestion',
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                  TextButton(
-                    onPressed: () {
-                      widget.controller.dismissAccidental(photo.id);
-                    },
-                    child: const Text('Not accidental',
-                      style: TextStyle(color: Colors.white)),
-                  ),
-                ]),
+      child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(fit: StackFit.expand, children: [
+            AssetEntityImage(photo,
+                isOriginal: false,
+                thumbnailSize: const ThumbnailSize(400, 400),
+                fit: BoxFit.cover),
+            if (selected)
+              DecoratedBox(
+                  decoration: BoxDecoration(
+                      border: Border.all(
+                          color: const Color(0xFF007982), width: 4))),
+            Positioned(
+                top: 5,
+                right: 5,
+                child: Icon(
+                  selected ? Icons.check_circle : Icons.circle_outlined,
+                  color: selected ? const Color(0xFF76FFE0) : Colors.white,
+                  shadows: const [Shadow(blurRadius: 6, color: Colors.black87)],
+                )),
+            if (photo.isFavorite)
+              const Positioned(
+                  bottom: 5,
+                  left: 5,
+                  child: Icon(Icons.favorite, color: Color(0xFFE94E70))),
+            if (widget.category == CleanupCategory.accidental)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black87,
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(
+                        widget.controller.result?.groups
+                                .accidentalReasons[photo.id] ??
+                            'Review suggestion',
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    TextButton(
+                      onPressed: () {
+                        widget.controller.dismissAccidental(photo.id);
+                      },
+                      child: const Text('Not accidental',
+                          style: TextStyle(color: Colors.white)),
+                    ),
+                  ]),
+                ),
               ),
-            ),
-        ])),
+          ])),
     );
   }
 }

@@ -21,6 +21,7 @@ class PhotoPreviewDialog extends StatefulWidget {
     required this.toggle,
     required this.delete,
     required this.keep,
+    this.readOnly = false,
   });
 
   final int initialIndex;
@@ -30,10 +31,15 @@ class PhotoPreviewDialog extends StatefulWidget {
   final bool Function(String) selected;
   final ValueChanged<AssetEntity> visit;
   final ValueChanged<AssetEntity> toggle;
+
   /// Delete only the image currently being previewed, not the grid selection.
   final Future<bool> Function(AssetEntity) delete;
+
   /// Keep only the current preview photo, independent of other selections.
   final Future<bool> Function(AssetEntity) keep;
+
+  /// Hide selection and destructive controls for browse-only collections.
+  final bool readOnly;
 
   @override
   State<PhotoPreviewDialog> createState() => _PhotoPreviewDialogState();
@@ -139,7 +145,8 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
         _close();
         return;
       }
-      final stillVisible = remaining.indexWhere((item) => item.id == current.id);
+      final stillVisible =
+          remaining.indexWhere((item) => item.id == current.id);
       // If Keepers removed the photo from Screenshots, stay at the same
       // position (now the next photo). Other views advance one position.
       final target = stillVisible == -1
@@ -169,7 +176,7 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.space) {
-      if (event is KeyDownEvent) _toggle();
+      if (!widget.readOnly && event is KeyDownEvent) _toggle();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.enter ||
@@ -180,7 +187,7 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
     }
     if (key == LogicalKeyboardKey.delete ||
         key == LogicalKeyboardKey.backspace) {
-      if (event is KeyDownEvent) _deleteCurrent();
+      if (!widget.readOnly && event is KeyDownEvent) _deleteCurrent();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -249,7 +256,8 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
                               child: IconButton.filled(
                                 tooltip: 'Previous (Left arrow)',
                                 onPressed: _deleting || _fetching || _index == 0
-                                    ? null : () => _navigate(-1),
+                                    ? null
+                                    : () => _navigate(-1),
                                 icon: const Icon(Icons.chevron_left),
                               ),
                             ),
@@ -257,21 +265,25 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
                               alignment: Alignment.centerRight,
                               child: IconButton.filled(
                                 tooltip: 'Next (Right arrow)',
-                                onPressed: _deleting || _fetching ||
-                                    (_index + 1 >= photos.length && !widget.hasMore())
-                                    ? null : () => _navigate(1),
+                                onPressed: _deleting ||
+                                        _fetching ||
+                                        (_index + 1 >= photos.length &&
+                                            !widget.hasMore())
+                                    ? null
+                                    : () => _navigate(1),
                                 icon: const Icon(Icons.chevron_right),
                               ),
                             ),
-                            Positioned(
-                              top: 6,
-                              right: 6,
-                              child: IconButton.filledTonal(
-                                tooltip: 'Close (Enter)',
-                                onPressed: _deleting ? null : _close,
-                                icon: const Icon(Icons.close),
+                            if (!widget.readOnly)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: IconButton.filledTonal(
+                                  tooltip: 'Close (Enter)',
+                                  onPressed: _deleting ? null : _close,
+                                  icon: const Icon(Icons.close),
+                                ),
                               ),
-                            ),
                             Positioned(
                               bottom: 10,
                               left: 0,
@@ -289,7 +301,8 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
                                       children: [
                                         IconButton(
                                           tooltip: checked
-                                              ? 'Unselect (Space)' : 'Select (Space)',
+                                              ? 'Unselect (Space)'
+                                              : 'Select (Space)',
                                           onPressed: _deleting ? null : _toggle,
                                           color: Colors.white,
                                           icon: Icon(checked
@@ -298,27 +311,31 @@ class _PhotoPreviewDialogState extends State<PhotoPreviewDialog> {
                                         ),
                                         IconButton(
                                           tooltip: 'Keep in Keepers',
-                                          onPressed: _deleting
-                                              ? null : _keepCurrent,
+                                          onPressed:
+                                              _deleting ? null : _keepCurrent,
                                           color: Colors.white,
-                                          icon: const Icon(Icons.bookmark_add_outlined),
+                                          icon: const Icon(
+                                              Icons.bookmark_add_outlined),
                                         ),
                                         _deleting
                                             ? const SizedBox(
                                                 width: 48,
                                                 height: 48,
                                                 child: Center(
-                                                  child: CircularProgressIndicator(
+                                                  child:
+                                                      CircularProgressIndicator(
                                                     strokeWidth: 2,
                                                     color: Colors.white,
                                                   ),
                                                 ),
                                               )
                                             : IconButton(
-                                                tooltip: 'Delete this photo (Delete)',
+                                                tooltip:
+                                                    'Delete this photo (Delete)',
                                                 onPressed: _deleteCurrent,
                                                 color: const Color(0xFFFFB2B2),
-                                                icon: const Icon(Icons.delete_outline),
+                                                icon: const Icon(
+                                                    Icons.delete_outline),
                                               ),
                                       ],
                                     ),

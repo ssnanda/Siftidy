@@ -4,7 +4,8 @@ import '../cleanup/deletion_stats.dart';
 
 /// PhotoKit-backed repository, kept separate from Flutter widgets for v0.2.
 class LibraryRepository {
-  Future<PermissionState> requestAccess() => PhotoManager.requestPermissionExtend();
+  Future<PermissionState> requestAccess() =>
+      PhotoManager.requestPermissionExtend();
 
   Future<AssetPathEntity?> openAll({
     required RequestType type,
@@ -49,10 +50,11 @@ class LibraryRepository {
   }
 
   static List<AssetPathEntity> userAlbums(List<AssetPathEntity> paths) {
-    final result = paths.where((path) =>
-      !path.isAll &&
-      path.albumTypeEx?.darwin?.type == PMDarwinAssetCollectionType.album
-    ).toList();
+    final result = paths
+        .where((path) =>
+            !path.isAll &&
+            path.albumTypeEx?.darwin?.type == PMDarwinAssetCollectionType.album)
+        .toList();
     result.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return result;
   }
@@ -76,7 +78,7 @@ class LibraryRepository {
 
   Future<Set<String>> keeperAssetIds(AssetPathEntity album) async {
     final ids = <String>{};
-    for (var pageIndex = 0; ; pageIndex++) {
+    for (var pageIndex = 0;; pageIndex++) {
       final batch = await album.getAssetListPaged(page: pageIndex, size: 200);
       ids.addAll(batch.map((asset) => asset.id));
       if (batch.length < 200) break;
@@ -108,13 +110,41 @@ class LibraryRepository {
   Future<int> count(AssetPathEntity album) => album.assetCountAsync;
 
   /// System handles confirmation and moves deleted items to Recently Deleted.
-  Future<List<String>> delete(List<String> ids, {
+  Future<List<String>> delete(
+    List<String> ids, {
     Map<String, int> knownSizes = const {},
+    String source = 'Library',
+    Iterable<AssetEntity> assets = const [],
   }) async {
+    final supplied = {for (final asset in assets) asset.id: asset};
+    final details = await Future.wait(ids.map((id) async {
+      final asset = supplied[id] ?? await AssetEntity.fromId(id);
+      var name = asset?.title;
+      if (asset != null && (name == null || name.trim().isEmpty)) {
+        try {
+          name = await asset.titleAsync;
+        } catch (_) {
+          // A title is optional; retain the remaining deletion details.
+        }
+      }
+      return DeletionItem(
+        id: id,
+        name: name == null || name.trim().isEmpty ? 'Untitled item' : name,
+        capturedAt: asset?.createDateTime,
+        mediaType: switch (asset?.type) {
+          AssetType.image => 'Photo',
+          AssetType.video => 'Video',
+          AssetType.audio => 'Audio',
+          _ => 'Media',
+        },
+        bytes: knownSizes[id],
+      );
+    }));
     final removed = await PhotoManager.editor.deleteWithIds(ids);
     if (removed.isNotEmpty) {
       try {
-        await DeletionStats.instance.record(removed, knownSizes);
+        await DeletionStats.instance
+            .record(removed, knownSizes, source: source, itemDetails: details);
       } catch (_) {
         // Deletion already succeeded; statistics must not misreport failure.
       }

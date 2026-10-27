@@ -116,8 +116,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     if (_preparingCleanupSizes || _cleanup.busy || !mounted) return;
     final ids = allCleanupSuggestionIds(_cleanup);
     if (ids.isEmpty) return;
-    if (ids.every((id) =>
-        _sizes.bytesFor(id) != null || _sizes.isPending(id))) {
+    if (ids
+        .every((id) => _sizes.bytesFor(id) != null || _sizes.isPending(id))) {
       return;
     }
     _preparingCleanupSizes = true;
@@ -151,10 +151,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     // A completed scan opens immediately using its saved category lists.
     // Resolve only the selected category's PhotoKit references as needed.
     final ids = switch (category) {
-      CleanupCategory.exact =>
-        _cleanup.exact.expand((group) => group),
-      CleanupCategory.similar =>
-        _cleanup.similar.expand((group) => group),
+      CleanupCategory.exact => _cleanup.exact.expand((group) => group),
+      CleanupCategory.similar => _cleanup.similar.expand((group) => group),
       CleanupCategory.blurry => _cleanup.blurry,
       CleanupCategory.noPeople => _cleanup.noPeople,
       CleanupCategory.accidental => _cleanup.accidentalScreenshots,
@@ -162,6 +160,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     };
     unawaited(_cleanup.restorePhotoReferences(ids));
   }
+
   final ScrollController _scroll = ScrollController();
   final FocusNode _gridFocus = FocusNode(debugLabel: 'Siftidy photo grid');
   int _focusedIndex = -1;
@@ -194,7 +193,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _photoRefreshTimer = Timer.periodic(
-      _photoRefreshInterval, (_) => unawaited(_checkForNewPhotos()),
+      _photoRefreshInterval,
+      (_) => unawaited(_checkForNewPhotos()),
     );
     _scroll.addListener(_onScroll);
     _cleanup.addListener(_onCleanupChanged);
@@ -258,7 +258,10 @@ class _LibraryScreenState extends State<LibraryScreen>
   /// Light PhotoKit count check: no thumbnails, hashes, or AI work unless
   /// the iCloud library actually changed.
   Future<void> _checkForNewPhotos() async {
-    if (_checkingPhotoLibrary || !mounted || _deleting || _loading ||
+    if (_checkingPhotoLibrary ||
+        !mounted ||
+        _deleting ||
+        _loading ||
         _permission?.hasAccess != true) {
       return;
     }
@@ -267,12 +270,15 @@ class _LibraryScreenState extends State<LibraryScreen>
       await _cleanup.initialize();
       if (!mounted) return;
       final all = await _repository.openAll(
-        type: RequestType.image, oldestFirst: false,
+        type: RequestType.image,
+        oldestFirst: false,
       );
       final photoCount = all == null ? 0 : await _repository.count(all);
       if (!mounted) return;
       final prior = _cleanup.checkpointStore?.current;
-      if (_cleanup.autoScan && !_cleanup.busy && prior?.complete == true &&
+      if (_cleanup.autoScan &&
+          !_cleanup.busy &&
+          prior?.complete == true &&
           prior!.total != photoCount) {
         unawaited(_cleanup.startIncremental(_keeperIds));
       }
@@ -280,7 +286,10 @@ class _LibraryScreenState extends State<LibraryScreen>
       // Update the visible gallery when the current album gains new photos.
       // Don't disturb selection, deletion, or active pagination.
       final album = _album;
-      if (album != null && !_loading && !_loadingMore && !_deleting &&
+      if (album != null &&
+          !_loading &&
+          !_loadingMore &&
+          !_deleting &&
           _selected.isEmpty) {
         final visibleCount = await _repository.count(album);
         if (mounted && !_loading && visibleCount != _libraryCount) {
@@ -303,8 +312,12 @@ class _LibraryScreenState extends State<LibraryScreen>
     _sizes.removeListener(_onCleanupChanged);
     _cleanup.dispose();
     _gridFocus.dispose();
-    for (final value in _selectedSignals.values) { value.dispose(); }
-    for (final value in _focusedSignals.values) { value.dispose(); }
+    for (final value in _selectedSignals.values) {
+      value.dispose();
+    }
+    for (final value in _focusedSignals.values) {
+      value.dispose();
+    }
     _scroll.dispose();
     super.dispose();
   }
@@ -323,8 +336,12 @@ class _LibraryScreenState extends State<LibraryScreen>
     _selectedSignals = {};
     _focusedSignals = {};
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final value in oldSelection.values) { value.dispose(); }
-      for (final value in oldFocus.values) { value.dispose(); }
+      for (final value in oldSelection.values) {
+        value.dispose();
+      }
+      for (final value in oldFocus.values) {
+        value.dispose();
+      }
     });
     setState(() {
       _loading = true;
@@ -364,13 +381,16 @@ class _LibraryScreenState extends State<LibraryScreen>
           : await _repository.keeperAssetIds(keepers);
       if (!mounted || generation != _generation) return;
       final screenshots = LibraryRepository.smartAlbum(
-        collections, PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
+        collections,
+        PMDarwinAssetCollectionSubtype.smartAlbumScreenshots,
       );
       final favorites = LibraryRepository.smartAlbum(
-        collections, PMDarwinAssetCollectionSubtype.smartAlbumFavorites,
+        collections,
+        PMDarwinAssetCollectionSubtype.smartAlbumFavorites,
       );
       final recordings = LibraryRepository.smartAlbum(
-        collections, PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings,
+        collections,
+        PMDarwinAssetCollectionSubtype.smartAlbumScreenRecordings,
       );
       setState(() {
         _userAlbums = userAlbums;
@@ -462,7 +482,8 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   bool _isVisibleAsset(AssetEntity asset) =>
-      (_filter != MediaFilter.screenshots || _albumId != null ||
+      (_filter != MediaFilter.screenshots ||
+          _albumId != null ||
           !_keeperIds.contains(asset.id)) &&
       isVisible(
         filter: _albumId != null ? MediaFilter.all : _filter,
@@ -482,11 +503,15 @@ class _LibraryScreenState extends State<LibraryScreen>
     return _filter.label;
   }
 
-  bool get _showingLibraryView => !_dashboardView &&
-      !_scanSettingsView && _savedSnapshot == null && !_activityView &&
+  bool get _showingLibraryView =>
+      !_dashboardView &&
+      !_scanSettingsView &&
+      _savedSnapshot == null &&
+      !_activityView &&
       _cleanupCategory == null;
 
-  void _chooseView(MediaFilter filter, {String? albumId, bool closeDrawer = false}) {
+  void _chooseView(MediaFilter filter,
+      {String? albumId, bool closeDrawer = false}) {
     if (_deleting ||
         (_showingLibraryView && _filter == filter && _albumId == albumId)) {
       return;
@@ -514,7 +539,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     String? albumId,
     bool closeDrawer = false,
   }) {
-    final selected = _showingLibraryView && _filter == filter && _albumId == albumId;
+    final selected =
+        _showingLibraryView && _filter == filter && _albumId == albumId;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: ListTile(
@@ -524,9 +550,13 @@ class _LibraryScreenState extends State<LibraryScreen>
         selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
         leading: Icon(icon, size: 20),
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: _deleting ? null : () => _chooseView(
-          filter, albumId: albumId, closeDrawer: closeDrawer,
-        ),
+        onTap: _deleting
+            ? null
+            : () => _chooseView(
+                  filter,
+                  albumId: albumId,
+                  closeDrawer: closeDrawer,
+                ),
       ),
     );
   }
@@ -552,25 +582,31 @@ class _LibraryScreenState extends State<LibraryScreen>
         selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         leading: Icon(category.icon, size: 20),
-        title: Text(title ?? category.label, maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13)),
-        subtitle: Text(sizeSummaryLabel(summarizeSizes(
-          cleanupCategorySizeIds(_cleanup, category), _sizes)),
-          maxLines: 2, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 10)),
+        title: Text(title ?? category.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13)),
+        subtitle: Text(
+            sizeSummaryLabel(summarizeSizes(
+                cleanupCategorySizeIds(_cleanup, category), _sizes)),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 10)),
         // Category results may still be accumulating. Display the current
         // numeric count, even when zero; only the scan control animates.
-        trailing: Text((category == CleanupCategory.noPeople &&
-                  (_cleanup.result?.peopleDetectionAvailable != true ||
-                      !_cleanup.analyzingPeople)) ||
-                  ((category == CleanupCategory.accidental ||
-                      category == CleanupCategory.propertyTours) &&
-                      _cleanup.result?.smartAnalyzed != true)
-              ? '—' : '$count',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-        onTap: _deleting ? null :
-          () => _chooseCleanup(category, closeDrawer: closeDrawer),
+        trailing: Text(
+            (category == CleanupCategory.noPeople &&
+                        (_cleanup.result?.peopleDetectionAvailable != true ||
+                            !_cleanup.analyzingPeople)) ||
+                    ((category == CleanupCategory.accidental ||
+                            category == CleanupCategory.propertyTours) &&
+                        _cleanup.result?.smartAnalyzed != true)
+                ? '—'
+                : '$count',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        onTap: _deleting
+            ? null
+            : () => _chooseCleanup(category, closeDrawer: closeDrawer),
       ),
     );
   }
@@ -592,12 +628,14 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   Widget _buildSidebar(BuildContext context, {bool closeDrawer = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Padding(padding: const EdgeInsets.fromLTRB(8, 16, 8, 10), child:
-        Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(8, 16, 8, 10),
+        child: Column(children: [
           ListTile(
             selected: _dashboardView,
             selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             leading: const Icon(Icons.dashboard_outlined),
             title: const Text('Dashboard'),
             onTap: () {
@@ -608,7 +646,8 @@ class _LibraryScreenState extends State<LibraryScreen>
           ListTile(
             selected: _scanSettingsView,
             selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             leading: const Icon(Icons.settings_outlined),
             title: const Text('Scan settings'),
             onTap: () {
@@ -619,35 +658,51 @@ class _LibraryScreenState extends State<LibraryScreen>
         ]),
       ),
       const Divider(height: 8),
-      const Padding(padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
-        child: Text('APPLE PHOTOS', style: TextStyle(
-          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
-        )),
+      const Padding(
+        padding: EdgeInsets.fromLTRB(18, 18, 18, 10),
+        child: Text('APPLE PHOTOS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            )),
       ),
-      Expanded(child: ListView(children: [
-        _sidebarTile(context, Icons.screenshot_monitor_outlined,
-          'Screenshots', MediaFilter.screenshots, closeDrawer: closeDrawer),
-        _sidebarTile(context, Icons.photo_library_outlined,
-          'All Media', MediaFilter.all, closeDrawer: closeDrawer),
-        _sidebarTile(context, Icons.photo_outlined,
-          'Photos', MediaFilter.photos, closeDrawer: closeDrawer),
-        _sidebarTile(context, Icons.movie_outlined,
-          'Videos', MediaFilter.videos, closeDrawer: closeDrawer),
-        _sidebarTile(context, Icons.favorite_outline,
-          'Favorites', MediaFilter.favorites, closeDrawer: closeDrawer),
-        if (_showRecordings)
-          _sidebarTile(context, Icons.videocam_outlined,
-            'Screen Recordings', MediaFilter.screenRecordings,
+      Expanded(
+          child: ListView(children: [
+        _sidebarTile(context, Icons.screenshot_monitor_outlined, 'Screenshots',
+            MediaFilter.screenshots,
             closeDrawer: closeDrawer),
+        _sidebarTile(
+            context, Icons.photo_library_outlined, 'All Media', MediaFilter.all,
+            closeDrawer: closeDrawer),
+        _sidebarTile(
+            context, Icons.photo_outlined, 'Photos', MediaFilter.photos,
+            closeDrawer: closeDrawer),
+        _sidebarTile(
+            context, Icons.movie_outlined, 'Videos', MediaFilter.videos,
+            closeDrawer: closeDrawer),
+        _sidebarTile(
+            context, Icons.favorite_outline, 'Favorites', MediaFilter.favorites,
+            closeDrawer: closeDrawer),
+        if (_showRecordings)
+          _sidebarTile(context, Icons.videocam_outlined, 'Screen Recordings',
+              MediaFilter.screenRecordings,
+              closeDrawer: closeDrawer),
         const Divider(height: 26, indent: 12, endIndent: 12),
-        const Padding(padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
-          child: Text('ALBUMS', style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
-          )),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(18, 4, 18, 8),
+          child: Text('ALBUMS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+              )),
         ),
-        _sidebarTile(context, Icons.bookmark_rounded,
-          'Siftidy Keepers', MediaFilter.keepers, closeDrawer: closeDrawer),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 8),
+        _sidebarTile(context, Icons.bookmark_rounded, 'Siftidy Keepers',
+            MediaFilter.keepers,
+            closeDrawer: closeDrawer),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           child: ListTile(
             dense: true,
             leading: const Icon(Icons.delete_outline),
@@ -663,11 +718,13 @@ class _LibraryScreenState extends State<LibraryScreen>
         ),
         for (final album in _userAlbums)
           if (album.name != LibraryRepository.keeperAlbumName)
-            _sidebarTile(context, Icons.folder_outlined, album.name,
-              MediaFilter.all, albumId: album.id, closeDrawer: closeDrawer),
+            _sidebarTile(
+                context, Icons.folder_outlined, album.name, MediaFilter.all,
+                albumId: album.id, closeDrawer: closeDrawer),
         if (_userAlbums.isEmpty)
-          const Padding(padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            child: Text('No other albums', style: TextStyle(fontSize: 12))),
+          const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: Text('No other albums', style: TextStyle(fontSize: 12))),
       ])),
     ]);
   }
@@ -675,21 +732,28 @@ class _LibraryScreenState extends State<LibraryScreen>
   Widget _buildCleanupSidebar(BuildContext context,
       {bool closeDrawer = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Padding(padding: EdgeInsets.fromLTRB(16, 18, 12, 12),
-        child: Text('SIFTIDY TOOLS', style: TextStyle(
-          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2,
-        )),
+      const Padding(
+        padding: EdgeInsets.fromLTRB(16, 18, 12, 12),
+        child: Text('SIFTIDY TOOLS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            )),
       ),
-      Padding(padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
-        child: Text('Total: ${sizeSummaryLabel(summarizeSizes(
-          allCleanupSuggestionIds(_cleanup), _sizes))}',
-          style: const TextStyle(fontSize: 11)),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+        child: Text(
+            'Total: ${sizeSummaryLabel(summarizeSizes(allCleanupSuggestionIds(_cleanup), _sizes))}',
+            style: const TextStyle(fontSize: 11)),
       ),
-      Expanded(child: ListView(children: [
+      Expanded(
+          child: ListView(children: [
         for (final category in CleanupCategory.values)
           _cleanupTile(context, category, closeDrawer: closeDrawer),
         const Divider(height: 24, indent: 10, endIndent: 10),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           child: ListTile(
             dense: true,
             selected: _activityView,
@@ -700,9 +764,10 @@ class _LibraryScreenState extends State<LibraryScreen>
             onTap: () => _chooseActivity(closeDrawer: closeDrawer),
           ),
         ),
-        const Padding(padding: EdgeInsets.fromLTRB(15, 10, 10, 8),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(15, 10, 10, 8),
           child: Text('Recently Deleted is managed by Apple Photos.',
-            style: TextStyle(fontSize: 11)),
+              style: TextStyle(fontSize: 11)),
         ),
       ])),
     ]);
@@ -744,14 +809,14 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   Future<void> _keepSelected() async {
-    final chosen = _assets.where((asset) => _selected.contains(asset.id))
+    final chosen = _assets
+        .where((asset) => _selected.contains(asset.id))
         .toList(growable: false);
     await _keepAssets(chosen);
   }
 
-  ValueNotifier<bool> _selectedSignal(String id) =>
-      _selectedSignals.putIfAbsent(
-        id, () => ValueNotifier<bool>(_selected.contains(id)));
+  ValueNotifier<bool> _selectedSignal(String id) => _selectedSignals
+      .putIfAbsent(id, () => ValueNotifier<bool>(_selected.contains(id)));
 
   ValueNotifier<bool> _focusedSignal(String id) =>
       _focusedSignals.putIfAbsent(id, () => ValueNotifier<bool>(false));
@@ -964,7 +1029,7 @@ class _LibraryScreenState extends State<LibraryScreen>
       // Apple Photos may ask for its own confirmation. Siftidy adds none.
       final ids = chosen.map((item) => item.id).toList(growable: false);
       final response = await _repository.delete(ids,
-        knownSizes: _sizes.knownFor(ids));
+          knownSizes: _sizes.knownFor(ids), assets: chosen);
       if (!mounted) return <String>{};
       final requestedIds = chosen.map((item) => item.id).toSet();
       final deletedIds = response.where(requestedIds.contains).toSet();
@@ -981,8 +1046,8 @@ class _LibraryScreenState extends State<LibraryScreen>
             _focusedSignals[oldFocusedId]?.value = false;
           }
           _focusedIndex = -1;
-          _libraryCount = (_libraryCount - deletedIds.length)
-              .clamp(0, 1 << 30).toInt();
+          _libraryCount =
+              (_libraryCount - deletedIds.length).clamp(0, 1 << 30).toInt();
           // Re-read the page whose offset shifted when PhotoKit removed items.
           if (_nextPage > _assets.length ~/ _pageSize) {
             _nextPage = _assets.length ~/ _pageSize;
@@ -1048,12 +1113,18 @@ class _LibraryScreenState extends State<LibraryScreen>
         visible.every((item) => _selected.contains(item.id));
     return Scaffold(
       key: _scaffoldKey,
-      drawer: isWide ? null : Drawer(child: SafeArea(
-        child: _buildSidebar(context, closeDrawer: true),
-      )),
-      endDrawer: isWide ? null : Drawer(child: SafeArea(
-        child: _buildCleanupSidebar(context, closeDrawer: true),
-      )),
+      drawer: isWide
+          ? null
+          : Drawer(
+              child: SafeArea(
+              child: _buildSidebar(context, closeDrawer: true),
+            )),
+      endDrawer: isWide
+          ? null
+          : Drawer(
+              child: SafeArea(
+              child: _buildCleanupSidebar(context, closeDrawer: true),
+            )),
       appBar: AppBar(
         title: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -1063,7 +1134,8 @@ class _LibraryScreenState extends State<LibraryScreen>
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Siftidy', style: TextStyle(fontWeight: FontWeight.w800)),
               Text('Your photos. Your choice. On your device.',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal)),
+                  style:
+                      TextStyle(fontSize: 11, fontWeight: FontWeight.normal)),
             ]),
           ],
         ),
@@ -1080,17 +1152,20 @@ class _LibraryScreenState extends State<LibraryScreen>
             ),
           ),
           if (!isWide)
-            IconButton(tooltip: 'Navigation',
-              icon: const Icon(Icons.menu),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer()),
-          IconButton(tooltip: 'Scan settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _showScanSettings),
+            IconButton(
+                tooltip: 'Navigation',
+                icon: const Icon(Icons.menu),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer()),
+          IconButton(
+              tooltip: 'Scan settings',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: _showScanSettings),
           const UpdateButton(),
           IconButton(
             tooltip: 'Refresh library',
             icon: const Icon(Icons.refresh),
-            onPressed: _deleting ? null : () => _reload(requestPermission: true),
+            onPressed:
+                _deleting ? null : () => _reload(requestPermission: true),
           ),
           if (_permission?.isLimited == true)
             IconButton(
@@ -1110,165 +1185,239 @@ class _LibraryScreenState extends State<LibraryScreen>
           SizedBox(width: 230, child: _buildSidebar(context)),
           const VerticalDivider(width: 1),
         ],
-        Expanded(child: _dashboardView
-            ? DashboardHome(
-                controller: _cleanup,
-                onScan: _startCurrentScan,
-                onPause: _cleanup.pauseOrResume,
-                onStop: _cleanup.stop,
-                onReview: _chooseCleanup,
-                onToggleHistory: _toggleHistory,
-                showAllHistory: _showAllHistory,
-                onSettings: _showScanSettings,
-                onOpenSnapshot: _showSavedSnapshot,
-              )
-            : _scanSettingsView
-            ? ScanSettingsHome(controller: _cleanup,
-                onBack: _showDashboard)
-            : _savedSnapshot != null
-            ? SavedSnapshotView(
-                snapshot: _savedSnapshot!,
-                onBack: _showDashboard,
-              )
-            : _activityView
-            ? const DeletionActivityView()
-            : _cleanupCategory == CleanupCategory.propertyTours
-            ? PropertyToursView(tours: _cleanup.propertyTours)
-            : _cleanupCategory != null
-            ? CleanupWorkspace(
-                controller: _cleanup,
-                category: _cleanupCategory!,
-                onLibraryChanged: () => _reload(),
-              )
-            : Column(children: [
-        if (_permission?.isLimited == true)
-          const MaterialBanner(
-            content: Text('Limited Photos access: only selected assets are visible.'),
-            actions: [SizedBox.shrink()],
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(_viewName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            )),
-            const SizedBox(height: 4),
-            Wrap(spacing: 18, runSpacing: 4, children: [
-              Text('Loaded: ${_visible.length} of $_libraryCount',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                  color: Color(0xFF27383D))),
-              const Text('50 at a time',
-                style: TextStyle(fontSize: 13, color: Color(0xFF27383D))),
-            ]),
-            const SizedBox(height: 9),
-            Wrap(
-              spacing: 12,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                DropdownButton<MediaSort>(
-                  value: _sort,
-                  isDense: true,
-                  underline: const SizedBox.shrink(),
-                  items: const [
-                    DropdownMenuItem(value: MediaSort.newest, child: Text('Newest first')),
-                    DropdownMenuItem(value: MediaSort.oldest, child: Text('Oldest first')),
-                  ],
-                  onChanged: _deleting ? null : (value) {
-                    if (value == null || value == _sort) {
-                      return;
-                    }
-                    setState(() => _sort = value);
-                    _reload();
-                  },
-                ),
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  Checkbox(
-                    value: allLoadedSelected,
-                    onChanged: _deleting || visible.isEmpty ? null :
-                        (value) => _toggleAllLoaded(visible, value ?? false),
-                  ),
-                  Text('All loaded (${visible.length})'),
-                ]),
-                if (_selected.isNotEmpty) ...[
-                  Text('${_selected.length} selected',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  TextButton.icon(
-                    onPressed: _deleting ? null : _clearSelection,
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Clear'),
-                  ),
-                ],
-              ],
-            ),
-          ]),
-        ),
-        Expanded(child: Focus(
-          focusNode: _gridFocus,
-          autofocus: true,
-          onKeyEvent: _handleGridKeys,
-          child: _buildContent(visible, cols),
-        )),
-      ])),
-        if (isWide && !_dashboardView &&
-            !_scanSettingsView && _savedSnapshot == null) ...[
+        Expanded(
+            child: _dashboardView
+                ? DashboardHome(
+                    controller: _cleanup,
+                    onScan: _startCurrentScan,
+                    onPause: _cleanup.pauseOrResume,
+                    onStop: _cleanup.stop,
+                    onReview: _chooseCleanup,
+                    onToggleHistory: _toggleHistory,
+                    showAllHistory: _showAllHistory,
+                    onSettings: _showScanSettings,
+                    onOpenSnapshot: _showSavedSnapshot,
+                  )
+                : _scanSettingsView
+                    ? ScanSettingsHome(
+                        controller: _cleanup, onBack: _showDashboard)
+                    : _savedSnapshot != null
+                        ? SavedSnapshotView(
+                            snapshot: _savedSnapshot!,
+                            onBack: _showDashboard,
+                          )
+                        : _activityView
+                            ? const DeletionActivityView()
+                            : _cleanupCategory == CleanupCategory.propertyTours
+                                ? PropertyToursView(
+                                    tours: _cleanup.propertyTours)
+                                : _cleanupCategory != null
+                                    ? CleanupWorkspace(
+                                        controller: _cleanup,
+                                        category: _cleanupCategory!,
+                                        onLibraryChanged: () => _reload(),
+                                      )
+                                    : Column(children: [
+                                        if (_permission?.isLimited == true)
+                                          const MaterialBanner(
+                                            content: Text(
+                                                'Limited Photos access: only selected assets are visible.'),
+                                            actions: [SizedBox.shrink()],
+                                          ),
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              16, 10, 16, 8),
+                                          child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(_viewName,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .headlineSmall
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        )),
+                                                const SizedBox(height: 4),
+                                                Wrap(
+                                                    spacing: 18,
+                                                    runSpacing: 4,
+                                                    children: [
+                                                      Text(
+                                                          'Loaded: ${_visible.length} of $_libraryCount',
+                                                          style: const TextStyle(
+                                                              fontSize: 13,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              color: Color(
+                                                                  0xFF27383D))),
+                                                      const Text('50 at a time',
+                                                          style: TextStyle(
+                                                              fontSize: 13,
+                                                              color: Color(
+                                                                  0xFF27383D))),
+                                                    ]),
+                                                const SizedBox(height: 9),
+                                                Wrap(
+                                                  spacing: 12,
+                                                  runSpacing: 4,
+                                                  crossAxisAlignment:
+                                                      WrapCrossAlignment.center,
+                                                  children: [
+                                                    DropdownButton<MediaSort>(
+                                                      value: _sort,
+                                                      isDense: true,
+                                                      underline: const SizedBox
+                                                          .shrink(),
+                                                      items: const [
+                                                        DropdownMenuItem(
+                                                            value: MediaSort
+                                                                .newest,
+                                                            child: Text(
+                                                                'Newest first')),
+                                                        DropdownMenuItem(
+                                                            value: MediaSort
+                                                                .oldest,
+                                                            child: Text(
+                                                                'Oldest first')),
+                                                      ],
+                                                      onChanged: _deleting
+                                                          ? null
+                                                          : (value) {
+                                                              if (value ==
+                                                                      null ||
+                                                                  value ==
+                                                                      _sort) {
+                                                                return;
+                                                              }
+                                                              setState(() =>
+                                                                  _sort =
+                                                                      value);
+                                                              _reload();
+                                                            },
+                                                    ),
+                                                    Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Checkbox(
+                                                            value:
+                                                                allLoadedSelected,
+                                                            onChanged: _deleting ||
+                                                                    visible
+                                                                        .isEmpty
+                                                                ? null
+                                                                : (value) =>
+                                                                    _toggleAllLoaded(
+                                                                        visible,
+                                                                        value ??
+                                                                            false),
+                                                          ),
+                                                          Text(
+                                                              'All loaded (${visible.length})'),
+                                                        ]),
+                                                    if (_selected
+                                                        .isNotEmpty) ...[
+                                                      Text(
+                                                          '${_selected.length} selected',
+                                                          style: const TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600)),
+                                                      TextButton.icon(
+                                                        onPressed: _deleting
+                                                            ? null
+                                                            : _clearSelection,
+                                                        icon: const Icon(
+                                                            Icons.close,
+                                                            size: 18),
+                                                        label:
+                                                            const Text('Clear'),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ]),
+                                        ),
+                                        Expanded(
+                                            child: Focus(
+                                          focusNode: _gridFocus,
+                                          autofocus: true,
+                                          onKeyEvent: _handleGridKeys,
+                                          child: _buildContent(visible, cols),
+                                        )),
+                                      ])),
+        if (isWide &&
+            !_dashboardView &&
+            !_scanSettingsView &&
+            _savedSnapshot == null) ...[
           const VerticalDivider(width: 1),
           SizedBox(width: 239, child: _buildCleanupSidebar(context)),
         ],
       ]),
       bottomNavigationBar: _dashboardView ||
-          _scanSettingsView || _savedSnapshot != null ||
-          _activityView || _cleanupCategory != null ||
-          _selected.isEmpty ? null : SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
-          child: SizedBox(
-            height: 64,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(200, 56),
-                        foregroundColor: const Color(0xFF005C62),
-                        textStyle: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold),
+              _scanSettingsView ||
+              _savedSnapshot != null ||
+              _activityView ||
+              _cleanupCategory != null ||
+              _selected.isEmpty
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+                child: SizedBox(
+                  height: 64,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(200, 56),
+                              foregroundColor: const Color(0xFF005C62),
+                              textStyle: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: _deleting ? null : _keepSelected,
+                            icon: const Icon(Icons.bookmark_add_outlined),
+                            label: const Text('Keep in Keepers'),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(265, 56),
+                              backgroundColor: const Color(0xFFB42333),
+                              foregroundColor: Colors.white,
+                              textStyle: const TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: _deleting ? null : _deleteSelected,
+                            icon: _deleting
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.delete_forever_outlined,
+                                    size: 24),
+                            label: Text(_deleting
+                                ? 'Working…'
+                                : 'Delete ${_selected.length} selected · '
+                                    '${sizeSummaryLabel(summarizeSizes(_selected, _sizes))}'),
+                          ),
+                        ],
                       ),
-                      onPressed: _deleting ? null : _keepSelected,
-                      icon: const Icon(Icons.bookmark_add_outlined),
-                      label: const Text('Keep in Keepers'),
                     ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(265, 56),
-                        backgroundColor: const Color(0xFFB42333),
-                        foregroundColor: Colors.white,
-                        textStyle: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: _deleting ? null : _deleteSelected,
-                      icon: _deleting
-                          ? const SizedBox(width: 20, height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.delete_forever_outlined, size: 24),
-                      label: Text(_deleting ? 'Working…'
-                          : 'Delete ${_selected.length} selected · '
-                            '${sizeSummaryLabel(summarizeSizes(_selected, _sizes))}'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -1277,7 +1426,8 @@ class _LibraryScreenState extends State<LibraryScreen>
       return const Center(child: CircularProgressIndicator());
     }
     if (_permission?.hasAccess != true) {
-      return Center(child: Padding(
+      return Center(
+          child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Icons.photo_library_outlined, size: 60),
@@ -1285,7 +1435,8 @@ class _LibraryScreenState extends State<LibraryScreen>
           const Text('Photos permission is required to browse your library.',
               textAlign: TextAlign.center),
           const SizedBox(height: 12),
-          FilledButton(onPressed: PhotoManager.openSetting,
+          FilledButton(
+              onPressed: PhotoManager.openSetting,
               child: const Text('Photos Permissions')),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -1293,13 +1444,15 @@ class _LibraryScreenState extends State<LibraryScreen>
             icon: const Icon(Icons.settings_outlined),
             label: const Text('Privacy & Security'),
           ),
-          TextButton(onPressed: () => _reload(requestPermission: true),
+          TextButton(
+              onPressed: () => _reload(requestPermission: true),
               child: const Text('Try again')),
         ]),
       ));
     }
     if (_error != null && visible.isEmpty) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      return Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.error_outline),
         const SizedBox(height: 8),
         const Text('Unable to load media.'),
@@ -1307,15 +1460,15 @@ class _LibraryScreenState extends State<LibraryScreen>
       ]));
     }
     if (visible.isEmpty && !_loadingMore && !_hasMore) {
-      return Center(child: Text(_filter == MediaFilter.screenshots
-          ? 'No screenshots found in Apple Photos.'
-          : 'No matching media found.'));
+      return Center(
+          child: Text(_filter == MediaFilter.screenshots
+              ? 'No screenshots found in Apple Photos.'
+              : 'No matching media found.'));
     }
     return CustomScrollView(
       controller: _scroll,
       scrollCacheExtent: const ScrollCacheExtent.pixels(900),
       slivers: [
-
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           sliver: SliverGrid.builder(
@@ -1345,16 +1498,19 @@ class _LibraryScreenState extends State<LibraryScreen>
             },
           ),
         ),
-        SliverToBoxAdapter(child: Padding(
+        SliverToBoxAdapter(
+            child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Center(child: _loadingMore
-              ? const CircularProgressIndicator()
-              : _hasMore
-                  ? OutlinedButton(
-                      onPressed: () => _fetchNext(_generation),
-                      child: const Text('Load more'),
-                    )
-                  : const Text('End of loaded library', style: TextStyle(fontSize: 12))),
+          child: Center(
+              child: _loadingMore
+                  ? const CircularProgressIndicator()
+                  : _hasMore
+                      ? OutlinedButton(
+                          onPressed: () => _fetchNext(_generation),
+                          child: const Text('Load more'),
+                        )
+                      : const Text('End of loaded library',
+                          style: TextStyle(fontSize: 12))),
         )),
       ],
     );

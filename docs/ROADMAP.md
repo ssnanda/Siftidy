@@ -63,6 +63,8 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
    classifier fragments from the same visit into one tour.
 4. [x] Recognize garages, driveways, porches and residential exteriors.
 5. [ ] Verify 6822 Trimbach Way and 958 Plaza Walk after a fresh scan.
+6. [x] Present tours as Property, Date, Photos and Location columns.
+7. [x] Open tour thumbnails in a read-only full-photo preview.
 
 ### Screenshot review tags
 
@@ -70,6 +72,13 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
 2. [x] Make tags multi-select with Select all and Select none.
 3. [x] Tighten lock-screen OCR positioning to reduce email false positives.
 4. [ ] Validate the new tags against the personal screenshot library.
+5. [x] Require a sparse clock-and-weekday layout for lock-screen suggestions.
+
+### Deletion activity
+
+1. [x] Persist deletion events with date, source category, count and size.
+2. [x] Show pre-event-history totals as Earlier Siftidy deletions.
+3. [x] Store a text-only per-item list with name, capture date, type and size.
 
 **Shipped for testing:** six result tiles; on-device possible lock-screen,
 near-blank and repeated-screenshot detection; 5+ consecutive property-photo
