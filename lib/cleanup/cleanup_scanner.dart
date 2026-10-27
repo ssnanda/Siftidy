@@ -328,7 +328,6 @@ class CleanupScanner {
         if (finger == null || cancelled()) {
           return const _ThumbnailAnalysis(null, null, null);
         }
-        final asset = photos[index];
         final bytes = thumbnails[index];
         bool? people;
         if (analyzePeople && visionUsable && bytes != null) {
@@ -345,13 +344,8 @@ class CleanupScanner {
         String? accidentalReason;
         if (screenshot) {
           accidentalReason = blankScreenshotReason(finger);
-          // Lock screens are portrait phone screenshots. Skip unnecessary
-          // OCR of desktop screenshots, documents and landscape captures.
-          final mobilePortrait = asset.width > 0 &&
-              asset.height >= asset.width * 1.6 &&
-              asset.height <= asset.width * 2.8;
-          if (accidentalReason == null && mobilePortrait && bytes != null) {
-            reportPhase('Checking potential lock-screen screenshots');
+          if (accidentalReason == null && bytes != null) {
+            reportPhase('Categorizing screenshots');
             try {
               accidentalReason = await _vision.invokeMethod<String>(
                   'screenshotReason', bytes)

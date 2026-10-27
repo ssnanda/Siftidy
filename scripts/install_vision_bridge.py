@@ -101,20 +101,40 @@ bridge = r'''
               }
               return (candidate.string.lowercased(), Float(observation.boundingBox.midY))
             }
+            let text = words.map { $0.0 }.joined(separator: " ")
+            func containsAny(_ terms: [String]) -> Bool {
+              return terms.contains(where: { text.contains($0) })
+            }
+            let alarm = containsAny(["alarm", "snooze", "wake up", "bedtime"])
+            let email = containsAny(["inbox", "reply all", "forwarded message",
+                                     "sent from my", "subject:", "from:"])
+            let message = containsAny(["imessage", "text message", "messages",
+                                       "delivered", "type a message", "whatsapp",
+                                       "messenger"])
             let clock = words.contains { candidate in
-              return candidate.1 > 0.42 &&
-                     candidate.0.range(of: #"^\d{1,2}:\d{2}$"#,
+              return candidate.1 > 0.72 &&
+                     candidate.0.range(of: #"^\d{1,2}:\d{2}(\s?[ap]m)?$"#,
                                        options: .regularExpression) != nil
             }
             let weekday = words.contains { candidate in
-              return ["monday", "tuesday", "wednesday", "thursday",
+              return candidate.1 > 0.60 &&
+                ["monday", "tuesday", "wednesday", "thursday",
                       "friday", "saturday", "sunday"].contains { day in
                 candidate.0.contains(day)
               }
             }
-            // A clock alone is not sufficient: a normal app may show time.
-            let reason: String? = (clock && weekday)
-                ? "Possible lock-screen capture" : nil
+            let reason: String?
+            if alarm {
+              reason = "Possible alarm capture"
+            } else if email {
+              reason = "Possible email capture"
+            } else if message {
+              reason = "Possible message capture"
+            } else if clock && weekday {
+              reason = "Possible lock-screen capture"
+            } else {
+              reason = nil
+            }
             DispatchQueue.main.async { result(reason) }
           } else {
             let classify = VNClassifyImageRequest()

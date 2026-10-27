@@ -193,8 +193,14 @@ void main() {
   });
 
   test('Screenshot suggestions expose consistent review subcategories', () {
+    expect(screenshotKindForReason('Possible alarm capture'),
+        ScreenshotSuggestionKind.alarms);
     expect(screenshotKindForReason('Possible lock-screen capture'),
         ScreenshotSuggestionKind.lockScreens);
+    expect(screenshotKindForReason('Possible message capture'),
+        ScreenshotSuggestionKind.messages);
+    expect(screenshotKindForReason('Possible email capture'),
+        ScreenshotSuggestionKind.emails);
     expect(screenshotKindForReason('Almost blank dark screenshot'),
         ScreenshotSuggestionKind.blankScreens);
     expect(screenshotKindForReason('Repeated screenshot within 90 seconds'),
@@ -228,5 +234,41 @@ void main() {
     expect(groups, hasLength(1));
     expect(groups.single.title, '6822 Trimbach Way');
     expect(groups.single.tours, [newer, older]);
+  });
+
+  test('split runs from one visit count as one property tour', () {
+    const fragments = [
+      PropertyTourSuggestion(ids: ['a', 'b', 'c', 'd', 'e'],
+        startedAtMs: 1000, latitude: 35.1, longitude: -80.1),
+      PropertyTourSuggestion(ids: ['f', 'g', 'h', 'i', 'j'],
+        startedAtMs: 1000, latitude: 35.1, longitude: -80.1),
+      PropertyTourSuggestion(ids: ['k', 'l', 'm', 'n', 'o'],
+        startedAtMs: 1000, latitude: 35.1, longitude: -80.1),
+    ];
+    final groups = groupPropertyTours(fragments, const {
+      'a': '4116 Austin Rd',
+      'f': '4116 Austin Rd',
+      'k': '4116 Austin Rd',
+    });
+
+    expect(groups, hasLength(1));
+    expect(groups.single.tours, hasLength(1));
+    expect(groups.single.tours.single.ids, hasLength(15));
+  });
+
+  test('properties sort by their most recent visit', () {
+    const older = PropertyTourSuggestion(
+      ids: ['old-a', 'old-b', 'old-c', 'old-d', 'old-e'],
+      startedAtMs: 1000);
+    const newer = PropertyTourSuggestion(
+      ids: ['new-a', 'new-b', 'new-c', 'new-d', 'new-e'],
+      startedAtMs: 2000);
+
+    final groups = groupPropertyTours(const [older, newer], const {
+      'old-a': 'A Property',
+      'new-a': 'Z Property',
+    });
+
+    expect(groups.map((group) => group.title), ['Z Property', 'A Property']);
   });
 }

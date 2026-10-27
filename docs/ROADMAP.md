@@ -59,9 +59,17 @@ Existing exact-duplicate, similar-photo, blurry-photo and people-detection *revi
 
 1. [x] Show measured original size per cleanup category and unique total.
 2. [x] Resolve GPS-backed tour addresses with Apple and cache them locally.
-3. [x] Group repeated dated tours beneath their property/address.
+3. [x] Group repeated dated tours beneath their property/address; merge
+   classifier fragments from the same visit into one tour.
 4. [x] Recognize garages, driveways, porches and residential exteriors.
 5. [ ] Verify 6822 Trimbach Way and 958 Plaza Walk after a fresh scan.
+
+### Screenshot review tags
+
+1. [x] Add Alarm, Lock screen, Messages, Email, Blank and Repeated tags.
+2. [x] Make tags multi-select with Select all and Select none.
+3. [x] Tighten lock-screen OCR positioning to reduce email false positives.
+4. [ ] Validate the new tags against the personal screenshot library.
 
 **Shipped for testing:** six result tiles; on-device possible lock-screen,
 near-blank and repeated-screenshot detection; 5+ consecutive property-photo

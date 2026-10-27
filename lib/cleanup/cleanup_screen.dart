@@ -79,7 +79,8 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
   final Set<String> _selectedPhotos = {};
   final Map<String, String> _keeperChoices = {};
   String? _expanded;
-  ScreenshotSuggestionKind? _screenshotFilter;
+  final Set<ScreenshotSuggestionKind> _screenshotFilters =
+      Set.of(ScreenshotSuggestionKind.values);
   late int _observedRevision;
   bool _busy = false;
   String? _message;
@@ -115,7 +116,9 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
       _selectedPhotos.clear();
       _keeperChoices.clear();
       _expanded = null;
-      _screenshotFilter = null;
+      _screenshotFilters
+        ..clear()
+        ..addAll(ScreenshotSuggestionKind.values);
       _message = null;
     }
   }
@@ -127,9 +130,8 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         CleanupCategory.noPeople => _chunk(widget.controller.noPeople),
         CleanupCategory.accidental => _chunk([
           for (final id in widget.controller.accidentalScreenshots)
-            if (_screenshotFilter == null ||
-                screenshotKindForReason(widget.controller.result?.groups
-                    .accidentalReasons[id]) == _screenshotFilter)
+            if (_screenshotFilters.contains(screenshotKindForReason(
+                widget.controller.result?.groups.accidentalReasons[id])))
               id,
         ]),
         CleanupCategory.propertyTours => const <List<String>>[],
@@ -271,25 +273,27 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
     if (_selectedGroups.contains(_key(group))) _inspect(_plannedExtras);
   }
 
-  bool _safeToDelete(Set<String> requested) {
-    // Prevent removing every member of any recognized duplicate set.
-    for (final group in [
-      ...widget.controller.exact,
-      ...widget.controller.similar,
-    ]) {
-      if (group.isNotEmpty && group.every(requested.contains)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  Set<String> _safeDeletionCandidates(Set<String> requested) =>
+      protectDuplicateKeepers(requested, [
+        ...widget.controller.exact,
+        ...widget.controller.similar,
+      ], (group) {
+        final photos = widget.controller.result?.photos ?? const {};
+        return group.every(photos.containsKey) ? _keeper(group) : group.first;
+      });
 
   Future<bool> _deleteIds(Set<String> requested) async {
     if (_busy || requested.isEmpty) return false;
     final currentIds = _visible.map((photo) => photo.id).toSet();
-    if (!currentIds.containsAll(requested) || !_safeToDelete(requested)) {
+    if (!currentIds.containsAll(requested)) {
+      setState(() => _message = 'Selection changed. Review it and try again.');
+      return false;
+    }
+    final safeRequested = _safeDeletionCandidates(requested);
+    final protected = requested.length - safeRequested.length;
+    if (safeRequested.isEmpty) {
       setState(() => _message =
-          'Selection changed. Keep at least one copy of each duplicate set.');
+          'Nothing can be deleted safely; duplicate keepers were protected.');
       return false;
     }
     setState(() {
@@ -299,8 +303,8 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
     try {
       // PhotoKit owns final confirmation and Recently Deleted semantics.
       final removed = await _repository.delete(
-        requested.toList(),
-        knownSizes: _sizes.knownFor(requested),
+        safeRequested.toList(),
+        knownSizes: _sizes.knownFor(safeRequested),
       );
       if (!mounted) return false;
       widget.controller.exclude(removed);
@@ -308,7 +312,12 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         _selectedGroups.removeWhere((key) =>
             !_groups.any((group) => _key(group) == key));
         _selectedPhotos.removeAll(removed);
-        _message = removed.isEmpty ? 'Nothing was deleted.' : null;
+        _message = removed.isEmpty
+            ? 'Nothing was deleted.'
+            : protected > 0
+                ? 'Deleted ${removed.length}; kept $protected duplicate ${
+                    protected == 1 ? "keeper" : "keepers"}.'
+                : null;
       });
       if (removed.isNotEmpty) widget.onLibraryChanged();
       return removed.isNotEmpty;
@@ -413,7 +422,9 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         : _currentlySelectedPhotoIds.length;
     final allCount = _groupMode ? groups.length : _visible.length;
     final selectedIds = _groupMode ? _plannedExtras : _currentlySelectedPhotoIds;
-    final canDelete = selectedCount > 0 && !_busy && selectedIds.isNotEmpty;
+    final deletableIds = _safeDeletionCandidates(selectedIds);
+    final protectedCount = selectedIds.length - deletableIds.length;
+    final canDelete = selectedCount > 0 && !_busy && deletableIds.isNotEmpty;
 
     return Column(children: [
       Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 8), child: Column(
@@ -431,13 +442,23 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
               widget.controller.accidentalScreenshots.isNotEmpty) ...[
             const SizedBox(height: 12),
             Wrap(spacing: 8, runSpacing: 6, children: [
-              FilterChip(
-                label: Text('All ${widget.controller.accidentalScreenshots.length}'),
-                selected: _screenshotFilter == null,
-                onSelected: (_) => setState(() {
-                  _screenshotFilter = null;
+              TextButton(
+                onPressed: _screenshotFilters.length ==
+                        ScreenshotSuggestionKind.values.length
+                    ? null : () => setState(() {
+                        _screenshotFilters
+                          ..clear()
+                          ..addAll(ScreenshotSuggestionKind.values);
+                        _selectedPhotos.clear();
+                      }),
+                child: const Text('Select all'),
+              ),
+              TextButton(
+                onPressed: _screenshotFilters.isEmpty ? null : () => setState(() {
+                  _screenshotFilters.clear();
                   _selectedPhotos.clear();
                 }),
+                child: const Text('Select none'),
               ),
               for (final kind in ScreenshotSuggestionKind.values)
                 if (widget.controller.accidentalScreenshots.where(
@@ -450,9 +471,13 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                             screenshotKindForReason(widget.controller.result
                                 ?.groups.accidentalReasons[id]) == kind)
                         .length}'),
-                    selected: _screenshotFilter == kind,
-                    onSelected: (_) => setState(() {
-                      _screenshotFilter = kind;
+                    selected: _screenshotFilters.contains(kind),
+                    onSelected: (selected) => setState(() {
+                      if (selected) {
+                        _screenshotFilters.add(kind);
+                      } else {
+                        _screenshotFilters.remove(kind);
+                      }
                       _selectedPhotos.clear();
                     }),
                   ),
@@ -628,9 +653,13 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
         ? Center(child: Text(controller.running
             ? 'Finding matches in the background…' : 'Start scanning to find photos.'))
         : groups.isEmpty
-            ? Center(child: Text(controller.running
-                ? 'No matches yet. New results will appear as scanning continues.'
-                : 'No ${widget.category.label.toLowerCase()} in this scan.'))
+            ? Center(child: Text(
+                widget.category == CleanupCategory.accidental &&
+                        _screenshotFilters.isEmpty
+                    ? 'Select one or more screenshot tags above.'
+                    : controller.running
+                        ? 'No matches yet. New results will appear as scanning continues.'
+                        : 'No ${widget.category.label.toLowerCase()} in this scan.'))
             : Column(children: [
               if (_groupMode && _expanded != null)
                 _expandedReview(groups),
@@ -662,6 +691,10 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
               Text(sizeSummaryLabel(summarizeSizes(selectedIds, _sizes)),
                 style: const TextStyle(fontSize: 12)),
+              if (protectedCount > 0)
+                Text('$protectedCount duplicate ${protectedCount == 1
+                    ? "keeper" : "keepers"} protected',
+                  style: const TextStyle(fontSize: 12)),
               if (!_groupMode)
                 OutlinedButton.icon(
                   onPressed: _busy ? null : () async {
@@ -679,8 +712,8 @@ class _CleanupWorkspaceState extends State<CleanupWorkspace> {
                   backgroundColor: const Color(0xFFB42333)),
                 icon: const Icon(Icons.delete_outline),
                 label: Text(_groupMode
-                    ? 'Keep $selectedCount · Delete ${selectedIds.length} extras'
-                    : 'Delete ${selectedIds.length} selected'),
+                    ? 'Keep $selectedCount · Delete ${deletableIds.length} extras'
+                    : 'Delete ${deletableIds.length} selected'),
               ),
             ],
           ),

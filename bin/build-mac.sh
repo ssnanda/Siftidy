@@ -152,6 +152,20 @@ if [[ "$PACKAGE" == true ]]; then
   RELEASE_ZIP="$ROOT_DIR/dist/Siftidy-macOS-universal-v$RELEASE_VERSION.zip"
   [[ -s "$RELEASE_ZIP" ]] || { echo "Release ZIP missing or empty." >&2; exit 1; }
   echo "ZIP: $RELEASE_ZIP"
+
+  # Keep only the newly verified local release archive. Older packages go to
+  # Finder's Trash so they remain recoverable with Put Back.
+  shopt -s nullglob
+  for old_zip in "$ROOT_DIR"/dist/Siftidy-macOS-universal-v*.zip; do
+    [[ "$old_zip" == "$RELEASE_ZIP" ]] && continue
+    osascript - "$old_zip" <<'APPLESCRIPT'
+on run argv
+  tell application "Finder" to delete POSIX file (item 1 of argv)
+end run
+APPLESCRIPT
+    echo "Moved old release ZIP to Trash: $old_zip"
+  done
+  shopt -u nullglob
 fi
 
 # Restore tracked configuration before releasing, so the uploaded binary

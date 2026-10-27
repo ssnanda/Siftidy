@@ -34,10 +34,12 @@ Candidate signals should include:
 4. **Mis-taps:** short screenshot bursts with no meaningful visual change,
    including accidentally captured volume/notification/control-center screens.
 
-Show **Lock screens**, **Blank captures**, **Repeated captures** and **Other
-suggestions** as subcategories when those results exist. Show the reason and
-allow **Not accidental**, deliberate review and user-controlled deletion.
-Persist user's decisions. Review-first; no auto-delete or automatic move.
+Show **Alarms**, **Lock screens**, **Messages**, **Emails**, **Blank captures**,
+**Repeated captures** and **Other suggestions** as multi-select tags when
+those results exist. All tags start selected, with quick Select all and Select
+none actions. Show the reason and allow **Not accidental**, deliberate review
+and user-controlled deletion. Persist user's decisions. Review-first; no
+auto-delete or automatic move.
 
 ## Property tours (v0.3 Smart Organization)
 

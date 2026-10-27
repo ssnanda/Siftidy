@@ -18,3 +18,19 @@ Set<String> duplicateExtras(
   }
   return extras;
 }
+
+/// Adjust an arbitrary cross-category selection so it never removes every
+/// member of a known duplicate set. Other selected photos remain deletable.
+Set<String> protectDuplicateKeepers(
+  Set<String> requested,
+  Iterable<List<String>> duplicateGroups,
+  String Function(List<String> group) keeperForGroup,
+) {
+  final safe = Set<String>.of(requested);
+  for (final group in duplicateGroups) {
+    if (group.isEmpty || !group.every(safe.contains)) continue;
+    final keeper = keeperForGroup(group);
+    safe.remove(group.contains(keeper) ? keeper : group.first);
+  }
+  return safe;
+}

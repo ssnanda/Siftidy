@@ -141,22 +141,25 @@ class _PropertyToursViewState extends State<PropertyToursView> {
         child: Text('No suggested property tours in this scan. '
             'Try scanning a series of at least five home/interior photos.')),
       for (final property in properties)
-        Card(margin: const EdgeInsets.symmetric(vertical: 8), child:
-          ExpansionTile(
-            initiallyExpanded: properties.length == 1,
-            title: Text(property.title),
-            subtitle: Text('${property.tours.length} ${
-              property.tours.length == 1 ? "tour" : "tours"} · ${
-              property.tours.fold<int>(0, (n, tour) => n + tour.ids.length)} photos'),
-            childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            children: [
-              for (final tour in property.tours) _tourCard(context, tour),
-            ],
-          )),
+        if (property.tours.length == 1)
+          _tourCard(context, property.tours.single)
+        else
+          Card(margin: const EdgeInsets.symmetric(vertical: 8), child:
+            ExpansionTile(
+              title: Text(property.title),
+              subtitle: Text('${property.tours.length} tours · ${
+                property.tours.fold<int>(0, (n, tour) => n + tour.ids.length)} photos'),
+              childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              children: [
+                for (final tour in property.tours)
+                  _tourCard(context, tour, nested: true),
+              ],
+            )),
     ]);
   }
 
-  Widget _tourCard(BuildContext context, PropertyTourSuggestion tour) {
+  Widget _tourCard(BuildContext context, PropertyTourSuggestion tour,
+      {bool nested = false}) {
     final key = _key(tour);
     final date = DateTime.fromMillisecondsSinceEpoch(tour.startedAtMs);
     final label = _labels[key];
@@ -168,8 +171,11 @@ class _PropertyToursViewState extends State<PropertyToursView> {
         TextEditingController(text: label ?? ''));
     return Card(margin: const EdgeInsets.symmetric(vertical: 5), child:
       ExpansionTile(
-        title: Text(label == null || label.isEmpty
-            ? 'Property tour · ${tour.ids.length} photos' : label),
+        title: Text(nested
+            ? '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+              '${date.day.toString().padLeft(2, '0')} · ${tour.ids.length} photos'
+            : label == null || label.isEmpty
+                ? 'Property tour · ${tour.ids.length} photos' : label),
         subtitle: Text('${date.year}-${date.month.toString().padLeft(2, '0')}-'
             '${date.day.toString().padLeft(2, '0')} · $coords'),
         childrenPadding: const EdgeInsets.all(14),
@@ -250,12 +256,31 @@ List<PropertyTourGroup> groupPropertyTours(
     grouped.putIfAbsent(key, () => []).add(tour);
     titles[key] = title;
   }
-  final result = [
-    for (final entry in grouped.entries)
-      PropertyTourGroup(entry.key, titles[entry.key]!, entry.value
-        ..sort((a, b) => b.startedAtMs.compareTo(a.startedAtMs))),
-  ];
-  result.sort((a, b) => a.title.compareTo(b.title));
+  final result = <PropertyTourGroup>[];
+  for (final entry in grouped.entries) {
+    final visits = <int, List<PropertyTourSuggestion>>{};
+    for (final tour in entry.value) {
+      visits.putIfAbsent(tour.startedAtMs, () => []).add(tour);
+    }
+    final consolidated = <PropertyTourSuggestion>[
+      for (final visit in visits.entries)
+        PropertyTourSuggestion(
+          ids: {
+            for (final fragment in visit.value) ...fragment.ids,
+          }.toList(),
+          startedAtMs: visit.key,
+          latitude: visit.value.first.latitude,
+          longitude: visit.value.first.longitude,
+        ),
+    ]..sort((a, b) => b.startedAtMs.compareTo(a.startedAtMs));
+    result.add(PropertyTourGroup(
+      entry.key, titles[entry.key]!, consolidated));
+  }
+  result.sort((a, b) {
+    final recent = b.tours.first.startedAtMs.compareTo(
+      a.tours.first.startedAtMs);
+    return recent != 0 ? recent : a.title.compareTo(b.title);
+  });
   return result;
 }
 

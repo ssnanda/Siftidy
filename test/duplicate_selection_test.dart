@@ -30,4 +30,15 @@ void main() {
     expect(() => duplicateExtras([['a', 'b']], {'a'}, (_) => 'x'),
         throwsStateError);
   });
+
+  test('cross-category deletion protects keepers without blocking others', () {
+    final safe = protectDuplicateKeepers(
+      {'a', 'b', 'c', 'unrelated'},
+      [['a', 'b'], ['b', 'c']],
+      (group) => group.first,
+    );
+    expect(safe, {'c', 'unrelated'});
+    expect(['a', 'b'].every(safe.contains), isFalse);
+    expect(['b', 'c'].every(safe.contains), isTrue);
+  });
 }

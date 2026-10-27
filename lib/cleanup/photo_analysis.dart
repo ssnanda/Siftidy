@@ -284,12 +284,27 @@ List<PropertyTourSuggestion> confirmedPropertyTourRuns(
 
 /// Explains why an accidental screenshot is suggested. Only known reasons
 /// generate concrete subcategories, so old scan snapshots still work.
-enum ScreenshotSuggestionKind { lockScreens, blankScreens, repeatedScreens, other }
+enum ScreenshotSuggestionKind {
+  alarms,
+  lockScreens,
+  messages,
+  emails,
+  blankScreens,
+  repeatedScreens,
+  other,
+}
 
 ScreenshotSuggestionKind screenshotKindForReason(String? reason) {
   final text = (reason ?? '').toLowerCase();
+  if (text.contains('alarm')) return ScreenshotSuggestionKind.alarms;
   if (text.contains('lock-screen') || text.contains('lock screen')) {
     return ScreenshotSuggestionKind.lockScreens;
+  }
+  if (text.contains('message') || text.contains('chat')) {
+    return ScreenshotSuggestionKind.messages;
+  }
+  if (text.contains('email') || text.contains('mail capture')) {
+    return ScreenshotSuggestionKind.emails;
   }
   if (text.contains('blank') || text.contains('empty')) {
     return ScreenshotSuggestionKind.blankScreens;
@@ -302,7 +317,10 @@ ScreenshotSuggestionKind screenshotKindForReason(String? reason) {
 
 extension ScreenshotSuggestionLabels on ScreenshotSuggestionKind {
   String get label => switch (this) {
+    ScreenshotSuggestionKind.alarms => 'Alarms',
     ScreenshotSuggestionKind.lockScreens => 'Lock screens',
+    ScreenshotSuggestionKind.messages => 'Messages',
+    ScreenshotSuggestionKind.emails => 'Emails',
     ScreenshotSuggestionKind.blankScreens => 'Blank captures',
     ScreenshotSuggestionKind.repeatedScreens => 'Repeated captures',
     ScreenshotSuggestionKind.other => 'Other suggestions',
