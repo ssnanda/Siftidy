@@ -158,12 +158,17 @@ if [[ "$PACKAGE" == true ]]; then
   shopt -s nullglob
   for old_zip in "$ROOT_DIR"/dist/Siftidy-macOS-universal-v*.zip; do
     [[ "$old_zip" == "$RELEASE_ZIP" ]] && continue
-    osascript - "$old_zip" <<'APPLESCRIPT'
+    if osascript - "$old_zip" <<'APPLESCRIPT'
 on run argv
-  tell application "Finder" to delete POSIX file (item 1 of argv)
+  set oldRelease to POSIX file (item 1 of argv) as alias
+  tell application "Finder" to delete oldRelease
 end run
 APPLESCRIPT
-    echo "Moved old release ZIP to Trash: $old_zip"
+    then
+      echo "Moved old release ZIP to Trash: $old_zip"
+    else
+      echo "Warning: could not move old release ZIP to Trash: $old_zip" >&2
+    fi
   done
   shopt -u nullglob
 fi

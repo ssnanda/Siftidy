@@ -10,6 +10,7 @@ APP_NAME="Siftidy"
 
 VERSION_OVERRIDE=""
 BUMP_PART=""
+NO_BUMP=false
 DO_PUSH=true
 YES=false
 
@@ -20,9 +21,11 @@ Siftidy version bump, commit and optional push.
 Usage:
   ./bin/bump-version.sh [--bump patch|minor|major|build] [--yes] [--no-push]
   ./bin/bump-version.sh --version X.Y.Z+B [--yes] [--no-push]
+  ./bin/bump-version.sh --no-bump [--yes] [--no-push]
 
 The patch default uses the newer of the local version and published version
 tags as a baseline. All non-ignored local changes are committed and pushed.
+Use --no-bump to commit/push while keeping the current version unchanged.
 USAGE
 }
 get_version() { awk '/^version:/ { print $2; exit }' "$PUBSPEC_FILE"; }
@@ -83,8 +86,9 @@ Choose release type:
   3) major  ($(bump_version "$base" major))
   4) build  ($(bump_version "$current" build))
   5) custom version
+  6) no bump (keep $current)
 MENU
-    read -r -p "Enter choice (1-5, default=1): " choice
+    read -r -p "Enter choice (1-6, default=1): " choice
     case "${choice:-1}" in
       1|patch|p) bump_version "$base" patch; return ;;
       2|minor|m) bump_version "$base" minor; return ;;
@@ -95,7 +99,8 @@ MENU
         validate_version "$custom"
         echo "$custom"
         return ;;
-      *) echo "Choose 1, 2, 3, 4 or 5." >&2 ;;
+      6|none|no-bump|n) echo "__NO_BUMP__"; return ;;
+      *) echo "Choose 1, 2, 3, 4, 5 or 6." >&2 ;;
     esac
   done
 }
@@ -103,14 +108,19 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) [[ $# -ge 2 ]] || exit 2; VERSION_OVERRIDE="$2"; shift 2 ;;
     --bump) [[ $# -ge 2 ]] || exit 2; BUMP_PART="$2"; shift 2 ;;
+    --no-bump) NO_BUMP=true; shift ;;
     --no-push) DO_PUSH=false; shift ;;
     --yes|-y) YES=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
 done
-[[ -z "$VERSION_OVERRIDE" || -z "$BUMP_PART" ]] || {
-  echo "Use only one of --version or --bump." >&2; exit 1;
+CHOICE_COUNT=0
+[[ -n "$VERSION_OVERRIDE" ]] && CHOICE_COUNT=$((CHOICE_COUNT + 1))
+[[ -n "$BUMP_PART" ]] && CHOICE_COUNT=$((CHOICE_COUNT + 1))
+[[ "$NO_BUMP" == true ]] && CHOICE_COUNT=$((CHOICE_COUNT + 1))
+(( CHOICE_COUNT <= 1 )) || {
+  echo "Use only one of --version, --bump or --no-bump." >&2; exit 1;
 }
 command -v git >/dev/null || { echo "Git required." >&2; exit 1; }
 BRANCH="$(git symbolic-ref --quiet --short HEAD)" || {
@@ -125,7 +135,9 @@ if [[ -n "$LATEST" ]] && version_gt "$LATEST" "${CURRENT_VERSION%+*}"; then
 fi
 echo "Latest GitHub release tag: ${LATEST:-unknown}" >&2
 
-if [[ -n "$VERSION_OVERRIDE" ]]; then
+if [[ "$NO_BUMP" == true ]]; then
+  NEXT_VERSION="$CURRENT_VERSION"
+elif [[ -n "$VERSION_OVERRIDE" ]]; then
   NEXT_VERSION="$VERSION_OVERRIDE"
 elif [[ -n "$BUMP_PART" ]]; then
   if [[ "$BUMP_PART" == build ]]; then
@@ -135,12 +147,16 @@ elif [[ -n "$BUMP_PART" ]]; then
   fi
 else
   NEXT_VERSION="$(choose_version "$CURRENT_VERSION" "$BASE")"
+  if [[ "$NEXT_VERSION" == "__NO_BUMP__" ]]; then
+    NO_BUMP=true
+    NEXT_VERSION="$CURRENT_VERSION"
+  fi
 fi
 validate_version "$NEXT_VERSION"
-[[ "$CURRENT_VERSION" != "$NEXT_VERSION" ]] || {
+[[ "$NO_BUMP" == true || "$CURRENT_VERSION" != "$NEXT_VERSION" ]] || {
   echo "Version already equals $NEXT_VERSION." >&2; exit 1;
 }
-if [[ -n "$LATEST" ]] &&
+if [[ "$NO_BUMP" != true && -n "$LATEST" ]] &&
     ! version_gt "${NEXT_VERSION%+*}" "$LATEST"; then
   echo "Note: v${NEXT_VERSION%+*} is not newer than v$LATEST." >&2
   echo "GitHub will validate this commit but skip publishing a release." >&2
@@ -156,19 +172,31 @@ if [[ "$YES" != true ]]; then
     echo "Other local changes that will be included:"
     git status --short
   fi
-  read -r -p "Bump to $NEXT_VERSION, $ACTION? [Y/n] " CONFIRM
+  if [[ "$NO_BUMP" == true ]]; then
+    PROMPT="Keep version $CURRENT_VERSION and $ACTION?"
+  else
+    PROMPT="Bump to $NEXT_VERSION, $ACTION?"
+  fi
+  read -r -p "$PROMPT [Y/n] " CONFIRM
   case "${CONFIRM:-y}" in y|Y|yes|YES) ;; *) echo "Cancelled"; exit 0 ;; esac
 fi
 
-# On macOS, sed -i requires an explicit empty backup suffix.
-sed -i '' "s/^version: .*/version: $NEXT_VERSION/" "$PUBSPEC_FILE"
+if [[ "$NO_BUMP" != true ]]; then
+  # On macOS, sed -i requires an explicit empty backup suffix.
+  sed -i '' "s/^version: .*/version: $NEXT_VERSION/" "$PUBSPEC_FILE"
+fi
 git add -A
 if git diff --cached --quiet; then
   echo "Nothing changed; no commit created." >&2
   exit 1
 fi
-git commit -m "Release $APP_NAME $NEXT_VERSION [skip ci]"
-echo "Version: $CURRENT_VERSION -> $NEXT_VERSION"
+if [[ "$NO_BUMP" == true ]]; then
+  git commit -m "Update $APP_NAME $CURRENT_VERSION [skip ci]"
+  echo "Version unchanged: $CURRENT_VERSION"
+else
+  git commit -m "Release $APP_NAME $NEXT_VERSION [skip ci]"
+  echo "Version: $CURRENT_VERSION -> $NEXT_VERSION"
+fi
 
 if [[ "$DO_PUSH" == true ]]; then
   "$ROOT_DIR/bin/pull-latest.sh"
